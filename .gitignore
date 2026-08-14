@@ -1,0 +1,22 @@
+# Agent / editor state
+.opencode/
+
+# Build artifacts
+build/
+build-asan/
+out/
+*.o
+*.obj
+*.a
+*.elf
+*.exe
+*.lib
+
+# Test / CLI logs
+cli_*.txt
+srv_*.txt
+gdb_out.txt
+
+# OS / IDE noise
+.DS_Store
+Thumbs.db
