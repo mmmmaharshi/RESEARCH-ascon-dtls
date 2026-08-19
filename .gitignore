@@ -20,3 +20,7 @@ gdb_out.txt
 # OS / IDE noise
 .DS_Store
 Thumbs.db
+
+# Vendored dependency: wolfSSL is its own git repository (holds the Ascon-DTLS
+# fork). Not vendored here; kept as a sibling checkout.
+wolfssl/
