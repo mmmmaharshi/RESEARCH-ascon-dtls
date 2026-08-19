@@ -32,11 +32,20 @@ function Run-One($mode, $size, $pos, $rep) {
     $pf = "$pdir\nm_$($script:id)_proxy.txt"
     $sf = "$pdir\nm_$($script:id)_srv.txt"
     $cf = "$pdir\nm_$($script:id)_cli.txt"
+    $pe = "$pdir\nm_$($script:id)_proxy.err"
+    $se = "$pdir\nm_$($script:id)_srv.err"
+    # R2 ('ku') corrupts every record via flood and relies on WOLFSSL_ASCON_KU_LIMIT
+    # (test-only, see wolfssl/src/dtls13.c) to fire an active KeyUpdate fast.
+    $proxyMode = if ($mode -eq 'ku') { 'flood' } else { $mode }
 
-    $pp = Start-Process pwsh -ArgumentList "-File", "$proxy", "-ListenPort", $lp, "-ServerPort", $sp, "-Mode", $mode, "-CorruptIndex", $pos, "-MinLen", 1, "-MaxLen", 2000 `
-        -RedirectStandardOutput $pf -RedirectStandardError "$pdir\nm_$($script:id)_proxy.err" -WindowStyle Hidden -PassThru
+    $pp = Start-Process pwsh -ArgumentList "-File", "$proxy", "-ListenPort", $lp, "-ServerPort", $sp, "-Mode", $proxyMode, "-CorruptIndex", $pos, "-MinLen", 1, "-MaxLen", 2000 `
+        -RedirectStandardOutput $pf -RedirectStandardError $pe -WindowStyle Hidden -PassThru
+    # R2 harness: force the Ascon KeyUpdate threshold low so a small forgery
+    # flood triggers an active peer rekey (WOLFSSL_ASCON_KU_LIMIT is test-only).
+    if ($mode -eq 'ku') { $env:WOLFSSL_ASCON_KU_LIMIT = '0' }
     $sproc = Start-Process $srv -ArgumentList $sp, 20 `
-        -RedirectStandardOutput $sf -RedirectStandardError "$pdir\nm_$($script:id)_srv.err" -WindowStyle Hidden -PassThru
+        -RedirectStandardOutput $sf -RedirectStandardError $se -WindowStyle Hidden -PassThru
+    if ($mode -eq 'ku') { $env:WOLFSSL_ASCON_KU_LIMIT = $null }
     # (2) Give the proxy time to bind. <1s caused a client-connect-before-bind
     #     race (Connection reset, 0 echoes) in the earlier matrix run.
     Start-Sleep -Seconds 4
@@ -51,9 +60,11 @@ function Run-One($mode, $size, $pos, $rep) {
 
     $echo = (Select-String -Path $cf -Pattern "echo ok"      | Measure-Object).Count
     $act   = (Select-String -Path $pf -Pattern "action="      | Measure-Object).Count
+    $kuLog= (Select-String -Path $se -Pattern "Issuing key update" | Measure-Object).Count
 
     if ($mode -eq 'observe')       { $pass = ($act -eq 0 -and $echo -eq 10) }
     elseif ($mode -eq 'replay')    { $pass = ($act -ge 1 -and $echo -eq 10) }
+    elseif ($mode -eq 'ku')        { $pass = ($kuLog -ge 1) }
     else                           { $pass = ($act -ge 1 -and $echo -lt 10) }
 
     Stop-Process -Id $pp.Id    -Force -ErrorAction 0
@@ -69,8 +80,9 @@ if ($Quick) {
     Run-One 'observe' 1000 1 1
     Run-One 'tamper'  14   1 1
     Run-One 'tamper'  1000 1 1
-    Run-One 'flood'   1000 1 1
+    Run-One 'flood'  1000 1 1
     Run-One 'replay'  14   1 1
+    Run-One 'ku'     1000 1 1
 }
 else {
     foreach ($sz in $sizes)           { Run-One 'observe' $sz 1 1 }

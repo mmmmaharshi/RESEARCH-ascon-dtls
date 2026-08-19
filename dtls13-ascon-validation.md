@@ -416,3 +416,40 @@ standardized Ascon specification. Combined with R1 (the server rejects any
 tag-corrupted record end-to-end) this closes the "is the Ascon implementation even
 correct?" reviewer objection for both the algorithm level (R8) and the protocol level
 (R1).
+
+## 9. R2 — Active KeyUpdate Under AEAD Forgery (Attack Resilience)
+
+Goal: demonstrate the DTLS 1.3 server actively rekeys (issues a peer KeyUpdate)
+when Ascon AEAD tag verification fails repeatedly, providing the forward-secrecy /
+attack-resilience property required of the 0x006E suite under a forgery flood.
+
+Mechanism (in `wolfssl/src/dtls13.c` `Dtls13CheckAEADFailLimit`): every failed
+record decryption increments `dropCount` (via `HandleDTLSDecryptFailed` at
+`internal.c:22955`); once `dropCount` exceeds `keyUpdateLimit` the server sets
+`dtls13DoKeyUpdate=1` and emits a `KeyUpdate`, re-establishing keys. Production
+threshold = `DTLS_AEAD_ASCON_FAIL_KU_LIMIT` (`2^15` rejected records before a
+rekey). The hard limit (`DTLS_AEAD_ASCON_FAIL_LIMIT`) instead tears down the
+connection with a `DECRYPT_ERROR`.
+
+Test hook (test-only, no production effect): the environment variable
+`WOLFSSL_ASCON_KU_LIMIT` overrides `keyUpdateLimit` when set; when unset the
+production `2^15` path is untouched. This lets a small forgery flood trigger an
+immediate rekey in the harness.
+
+Harness (`tools/run_negative_matrix.ps1` `ku` mode): proxy runs in `flood` mode
+(corrupts the AEAD tag of every application record) against `size=1000`, with
+`WOLFSSL_ASCON_KU_LIMIT=0`; PASS requires the server log to contain
+`Connection exceeded key update limit. Issuing key update` (and a successful
+`SendTls13KeyUpdate`).
+
+Result (size=1000 forgery flood, `LIMIT=0`): the server logged
+`Connection exceeded key update limit. Issuing key update` ×13, completed
+`Entering SendTls13KeyUpdate` → `return 0`, dropped 12 forgery records, and the
+client received 0 echoes. The `ku` row is included in the full matrix and passes
+(`act ≥ 1`, `echo < 10`). The production default (`2^15`) is verified to remain
+active when the env var is unset.
+
+**Conclusion (R1+R2+R8).** The 0x006E record layer (a) is bit-exact with the
+standardized Ascon specification (R8), (b) rejects every tag-corrupted or replayed
+record end-to-end (R1), and (c) actively rekeys under a sustained forgery flood to
+limit the impact of any accepted ciphertext (R2).
