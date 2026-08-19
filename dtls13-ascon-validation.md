@@ -369,7 +369,7 @@ repetitions and identical for both sizes:
 The stream stops after the first rejected record (fail-closed on the server's
 read path), so "corruption at position N" ⇒ "N−1 echoes", which is exactly what
 every cell shows. CSV evidence: `tools/negative_matrix_results.csv`
-(80 rows). Summary evidence: `matrix_full_run.log`.
+(80 rows). Summary evidence: `matrix_full_run.log` (scratch working dir).
 
 **Harness fixes this re-run required (both committed in `fb8ff0f`):**
 1. *Server read buffer.* The echo loop used a 64-byte read buffer and 20
@@ -539,7 +539,8 @@ round-trip now succeed between two independently developed stacks:
   AEAD/hash added in commit `14fd7eb` (`lib/cifra/ascon.c`).
 * Handshake: `HANDSHAKE OK. cipher id=0x006e name=TLS13-ASCONAEAD128-ASCONHASH256`
   on both sides; application data: client `ping` → server echo, verified
-  multiple clean runs (logs: `srvF1/F2.err`, `clientF1/F2.txt`).
+  multiple clean runs (logs: `srvF1/F2.err`, `clientF1/F2.txt`, scratch
+  working dir).
 
 picotls implements no DTLS transport, so the interop is TLS 1.3 over TCP;
 DTLS 1.3 cross-stack remains definitionally impossible on this host (see below).
@@ -651,6 +652,16 @@ zeroed-state defect (only visible because the OpenSSL-derived schedule was
 computed independently) and the OpenSSL provider's per-record nonce re-init
 defect (only visible because wolfSSL transmits two records in the handshake
 epoch — EE then Finished — under one key set).
+
+**PSK-only (`psk_ke`) OpenSSL-server attempt.** `openssl s_server -tls1_3
+-nocert -psk <hex> -psk_identity Client_identity -allow_no_dhe_kex
+-ciphersuites TLS_ASCON_AEAD128_ASCON_HASH256` was pointed at by the
+PSK-only picotls client (`tools/picotls_psk_client.c`, `key_exchanges=NULL`)
+and failed server-side with `final_key_share: no suitable key share`
+(statem/extensions.c:1412): OpenSSL's legacy `-psk` path still forces a DHE
+key share even with `-allow_no_dhe_kex`. `psk_ke`-mode interop therefore
+remains covered by the picotls↔wolfSSL pair (R7); with OpenSSL, 0x006E is
+verified in `psk_dhe_ke` mode only.
 
 **Conclusion (R1+R2+R6+R7+R8).** The 0x006E record layer (a) is bit-exact with the
 standardized Ascon specification (R8), (b) rejects every tag-corrupted or replayed
