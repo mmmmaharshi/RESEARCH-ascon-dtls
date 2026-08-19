@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include "benchmark.h"
+void record_bench(void);
 
 #define SYST_CSR (*(volatile uint32_t*)0xE000E010u)
 #define SYST_RVR (*(volatile uint32_t*)0xE000E014u)
@@ -97,6 +98,7 @@ int main(void)
     SYST_CSR = CTRL_ENABLE_CLK;
 
     int rc = benchmark_test(NULL);
+    record_bench();
     hdr[3] = 1; /* done */
     return rc;
 }

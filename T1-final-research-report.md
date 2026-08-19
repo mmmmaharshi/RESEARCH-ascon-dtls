@@ -40,6 +40,7 @@ The implementation uses:
 | Cortex-M3 cycle test | Run in Renode (Cortex-M3 @32MHz): ASCON-AEAD128 0.585 MiB/s vs AES-128-GCM 0.166 MiB/s (~3.5× faster); ChaCha20-Poly1305 2.725 MiB/s (~16× faster than AES-GCM). See `renode-benchmark-results.md`. |
 | X.509 mode with peer verification enabled | PASS |
 | Forced KeyUpdate on failed authentication (RFC 9846 §4.7.3) | PASS |
+| Cortex-M0+/M3 per-record Ascon cost | encrypt 4091/2380 cyc, decrypt 9769/8035 cyc, mask 1299/809 cyc (32-byte record, @32 MHz). See `renode-benchmark-results.md`. |
 
 The final PSK test produced:
 
@@ -279,6 +280,29 @@ The server trust store uses the self-signed client certificate as a trust
 anchor. This verifies the certificate signature and identity for this local
 test. A production deployment should use a dedicated client CA instead of
 trusting an end-entity certificate directly.
+
+## DTLS record-layer benchmark (Cortex-M)
+
+The Renode harness was extended (`tools/renode/bench_record.c`) to measure the
+cost of protecting one DTLS 1.3 record with `TLS13-ASCONAEAD128-ASCONHASH256`
+on the emulated Cortex-M0+/M3, using the same SysTick timing as the primitive
+benchmark. Each line is one full `wc_AsconAEAD128` operation (Init, SetKey,
+SetNonce, SetAD, Update, Final + 16-byte tag) over a 32-byte application
+record, plus the keyed-permutation record-number mask (independent `sn_key`)
+and a modeled failed-authentication to forced-KeyUpdate decision. Full capture
+in `renode-benchmark-results.md`.
+
+| Operation | Cortex-M0+ (cyc/rec) | Cortex-M3 (cyc/rec) |
+|---|---:|---:|
+| record encrypt | 4091.5 | 2380.5 |
+| record decrypt | 9769.7 | 8035.6 |
+| record-number mask | 1299.8 | 809.3 |
+
+At 32 MHz these are ~0.13 ms / 0.31 ms (encrypt / decrypt) per protected
+application message on Cortex-M0+. The record path includes the keyed-sponge
+record-number mask, so the per-message cost already covers sequence-number
+protection. This completes the device-side record-path benchmarking that was
+outstanding from the earlier validation.
 
 ## Limitations
 

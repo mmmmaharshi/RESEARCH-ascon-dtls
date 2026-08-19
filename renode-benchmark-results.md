@@ -55,3 +55,40 @@ count; the `MiB/s` column is the throughput and is the comparison metric.)
   x86). Only the relative ordering and the M0+/M3 scaling are meaningful here.
 - AEAD throughput includes tag generation/verification; hash/HMAC rows are
   raw transforms for context.
+
+## DTLS record-layer benchmark (per-record cycle cost)
+
+`tools/renode/bench_record.c` (`record_bench()`) measures the cost of
+protecting **one DTLS 1.3 record** with `TLS13-ASCONAEAD128-ASCONHASH256` on
+the same Renode Cortex-M0+/M3 targets, using the same SysTick timing. Each
+line is one full `wc_AsconAEAD128` operation (`Init → SetKey → SetNonce →
+SetAD → Update → Final` + 16-byte tag) over a 32-byte application record,
+plus the keyed-permutation record-number mask (independent `sn_key`), and a
+modeled failed-authentication → forced-KeyUpdate decision (the `dropCount`
+compare against the 2^15 reference limit). This is the per-message cost the
+DTLS state machine pays on a constrained node — the missing empirical piece
+behind the "device-side record-path benchmarking" future-work item.
+
+| Operation | Cortex-M0+ (cyc/rec) | Cortex-M3 (cyc/rec) | M0+ cyc/byte | M3 cyc/byte |
+|---|---:|---:|---:|---:|
+| ascon-record-encrypt | 4091.5 | 2380.5 | 127.9 | 74.4 |
+| ascon-record-decrypt | 9769.7 | 8035.6 | 305.3 | 251.1 |
+| ascon-record-mask | 1299.8 | 809.3 | — | — |
+
+### Findings
+
+- One protected DTLS application record costs **~4.1k (M0+) / ~2.4k (M3)
+  cycles to encrypt** and **~9.8k (M0+) / ~8.0k (M3) cycles to decrypt**, at
+  32 MHz ≈ 0.13 ms / 0.31 ms (encrypt / decrypt) on M0+. The record-number
+  mask adds ~1.3k / 0.8k cycles (an independent keyed permutation).
+- Decrypt is ~2.4× the encrypt cost because AEAD verification must process
+  the whole ciphertext before accepting — matching the primitive benchmark's
+  encrypt/decrypt asymmetry.
+- These are **software-only emulated (Renode) numbers, not silicon**. They
+  bound the per-message CPU cost on a constrained node and confirm the
+  Ascon record path is cheap relative to the AES-GCM record path on the same
+  cores (ASCON-AEAD was ~4.8× / ~3.5× faster than AES-128-GCM in the
+  throughput rows above).
+- The record path includes the keyed-sponge record-number mask (design
+  Option B, `ASCON_MASK_DOMSEP`), so the per-message cost already accounts
+  for sequence-number protection, not just ciphertext.

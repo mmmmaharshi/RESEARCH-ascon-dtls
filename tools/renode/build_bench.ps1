@@ -32,6 +32,7 @@ $incs = @(
 )
 $srcs = @(
     "$PSScriptRoot\bench_main.c",
+    "$PSScriptRoot\bench_record.c",
     "$PSScriptRoot\probe\startup.s",
     "$root\wolfssl\wolfcrypt\benchmark\benchmark.c",
     "$root\wolfssl\wolfcrypt\src\ascon.c",

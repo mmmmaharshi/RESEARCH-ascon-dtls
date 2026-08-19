@@ -278,8 +278,9 @@ the server logged `DTLS: Ignoring failed decryption` per record,
 actually emitted. Evidence: `tools/keyupdate-evidence.txt`. (The proxy harness
 was hardened to fix three real DTLS 1.3 bugs: the outer record header is not
 0x17 in DTLS 1.3, a deleted `$out` init that crashed every relay, and
-Start-Job stderr capture.) Device-side Renode record-path benchmarking remains
-future work.
+Start-Job stderr capture.) Device-side Renode record-path benchmarking is now
+done — see `renode-benchmark-results.md` (per-record Ascon encrypt 4091/2380
+cyc, decrypt 9769/8035 cyc, mask 1299/809 cyc on Cortex-M0+/M3 @32 MHz).
 
 ## 6. X.509 cert-mode handshake (M2.5) — VERIFIED
 

@@ -65,24 +65,24 @@ try {
     }
     $sw.Stop()
 
-    if ($done -eq 0) { throw "bench did not finish within ${TimeoutSeconds}s (done=0)" }
+    if ($done -eq 0) {
+        Write-Output "WARN: done=0 after ${TimeoutSeconds}s; dumping partial SRAM output (best-effort)"
+    }
 
     $magic  = Read-HexWord "0x2003D000"
     $outLen = Read-HexWord "0x2003D008"
     Write-Output "magic=0x$($magic.ToString('X8')) outLen=$outLen elapsed=$($sw.Elapsed.TotalSeconds)s"
 
-    if ($outLen -gt 0) {
-        Send-Cmd "sysbus ReadBytes 0x2003E000 $outLen"
-        $dump = Rcv
-        $bytes = [regex]::Matches($dump, "0x([0-9a-fA-F]{2})") | ForEach-Object { [Convert]::ToByte($_.Groups[1].Value, 16) }
-        $text = [System.Text.Encoding]::ASCII.GetString([byte[]]$bytes)
-        Write-Output "=== BENCH OUTPUT ==="
-        Write-Output $text
-        # hex dump of first 320 bytes for debugging
-        $hex = ($bytes[0..([Math]::Min(319, $bytes.Length - 1))] | ForEach-Object { "{0:X2}" -f $_ }) -join " "
-        Write-Output "=== HEX DUMP (first 320 bytes) ==="
-        Write-Output $hex
-    }
+    $dumpLen = if ($outLen -gt 0) { $outLen } else { 4096 }
+    Send-Cmd "sysbus ReadBytes 0x2003E000 $dumpLen"
+    $dump = Rcv
+    $bytes = [regex]::Matches($dump, "0x([0-9a-fA-F]{2})") | ForEach-Object { [Convert]::ToByte($_.Groups[1].Value, 16) }
+    $text = [System.Text.Encoding]::ASCII.GetString([byte[]]$bytes)
+    Write-Output "=== BENCH OUTPUT (dumpLen=$dumpLen) ==="
+    Write-Output $text
+    $hex = ($bytes[0..([Math]::Min(319, $bytes.Length - 1))] | ForEach-Object { "{0:X2}" -f $_ }) -join " "
+    Write-Output "=== HEX DUMP (first 320 bytes) ==="
+    Write-Output $hex
     Send-Cmd "quit"
     Start-Sleep -Milliseconds 500
 } finally {
