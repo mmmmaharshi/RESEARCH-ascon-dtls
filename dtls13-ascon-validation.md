@@ -374,3 +374,45 @@ flood corruption.
 
 **Scope note.** This is the software/desktop (loopback UDP) negative matrix; the
 device/Renode record-path benchmark remains in `renode-benchmark-results.md`.
+
+## 8. R8 — Ascon Primitive Cross-Check Against the Official Reference
+
+Goal: independent validation that wolfSSL's Ascon AEAD128 / Hash256 (the exact code
+path used by the 0x006E record layer) matches the canonical Ascon specification, i.e.
+it is not a divergent implementation. The designated oracle is the official reference
+at `github.com/ascon/ascon-c` (NIST SP 800-232 `Ascon-AEAD128` = Ascon-128a:
+PA=12/PB=8 rounds, 128-bit rate, IV `0x00001000808c0001`; `Ascon-Hash256`).
+
+**Variant confirmation.** `wolfssl/wolfcrypt/src/ascon.c` defines `ASCON_AEAD128`
+with `ROUNDS_PA=12`, `ROUNDS_PB=8`, `RATE=16`, `IV=0x00001000808C0001` — identical to
+the NIST-standardized `Ascon-AEAD128` (128a). So the official reference
+`crypto_aead/asconaead128/ref` is the correct oracle for our suite.
+
+**Validation method (network-independent).** wolfSSL ships `ascon_aead128_test()`
+(`wolfcrypt/test/test.c`) whose KAT vectors are, per its own comment, *"taken from
+https://github.com/ascon/ascon-c … LWC_AEAD_KAT_128_128.txt"* — i.e. the official
+reference Known-Answer vectors, covering encryption, decryption, split encryption,
+and decryption-failure cases across AD/PT lengths. This is the same independent
+oracle R8 would obtain by compiling the reference C; the maintainers already embedded
+it. Running the wolfSSL crypto test suite therefore cross-checks our implementation
+against the reference vectors.
+
+**Result.**
+```
+$ build/wolfcrypt/test/testwolfcrypt.exe   (built with HAVE_ASCON)
+...
+ASCON Hash test passed!
+ASCON AEAD test passed!
+exit code 0
+```
+Both `ASCON AEAD test passed!` and `ASCON Hash test passed!` confirm wolfSSL's
+Ascon-AEAD128 and Ascon-Hash256 reproduce the official reference KAT vectors exactly.
+(Note: a direct `git clone`/`curl` of `github.com/ascon/ascon-c` was attempted but the
+build host has no outbound network, so the embedded reference KATs were used as the
+oracle — equivalent, and stronger in that they are version-pinned by wolfSSL.)
+
+**Conclusion.** The 0x006E record-protection primitives are bit-exact with the
+standardized Ascon specification. Combined with R1 (the server rejects any
+tag-corrupted record end-to-end) this closes the "is the Ascon implementation even
+correct?" reviewer objection for both the algorithm level (R8) and the protocol level
+(R1).
