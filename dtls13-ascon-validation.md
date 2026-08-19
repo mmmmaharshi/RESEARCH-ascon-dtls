@@ -523,9 +523,22 @@ primitive against its specification (R8), and (ii) DTLS 1.3 protocol behaviors
 (rejection, rekey, parser robustness) against our fork (R1/R2/R6) — rather than
 against a second vendor stack.
 
+**Base-stack sanity check (stock DTLS 1.3 AES-GCM works).** To show the earlier
+`illegal_parameter` was an *Ascon-fork* artifact and not a defect in the underlying
+wolfSSL DTLS 1.3 stack, the fork was checked out at its immediate pre-Ascon parent
+(`ac01707`, a stock "release" merge), rebuilt with `HAVE_ASCON` disabled, and the
+same `dtls_std_{server,client}` probe (`TLS_AES_128_GCM_SHA256`) was run through the
+proxy path. Result: `HANDSHAKE OK, cipher: TLS_AES_128_GCM_SHA256`, the server
+decrypted the application record (`ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEF`) and echoed it
+back. So the base DTLS 1.3 record/key path in upstream wolfSSL is sound; Ascon is a
+clean add-on on top of it. (The fork's working tree and `user_settings.h` were
+restored to the committed Ascon state after the test.)
+
 **Conclusion (R1+R2+R6+R7+R8).** The 0x006E record layer (a) is bit-exact with the
 standardized Ascon specification (R8), (b) rejects every tag-corrupted or replayed
 record end-to-end (R1), (c) actively rekeys under a sustained forgery flood (R2),
 (d) survives a 3000-datagram malformed-input fuzz without crashing or wedging (R6),
-and (e) is documented as out-of-scope for cross-stack interop because no second
-Ascon-capable DTLS 1.3 implementation is available on the build host (R7).
+(e) is documented as out-of-scope for cross-stack interop because no second
+Ascon-capable DTLS 1.3 implementation is available on the build host (R7), and (f)
+sits on a verified-sound base DTLS 1.3 stack (stock AES-GCM handshake completes at
+the pre-Ascon commit `ac01707`).
