@@ -354,6 +354,39 @@ bit. Loopback UDP delivers exactly the forwarded bytes.
 | `flood`    size=1000 | 0    | 1       | PASS    | **every** large app-record tag flipped → all rejected |
 | `replay`   size=14   | 10   | 1       | PASS    | duplicate app record dropped, delivered once  |
 
+**Full 80-cell matrix (18-08, post-harness-fix): 80/80 PASS.** `tamper`,
+`truncate`, `sequence` and `epoch` were each run against **both** sizes ×
+positions {1, 5, 10} × 3 repetitions, plus `observe`/`replay` controls and the
+`ku` forced-KeyUpdate cell. The echo counts are deterministic across all 3
+repetitions and identical for both sizes:
+
+| position of corrupted record | echoes delivered | meaning                                        |
+| ---------------------------- | ---------------- | ---------------------------------------------- |
+| 1                            | 0                | 1st record rejected → no application data flows |
+| 5                            | 4                | records 1–4 delivered, 5th rejected → stream stops |
+| 10                           | 9                | records 1–9 delivered, 10th rejected → stream stops |
+
+The stream stops after the first rejected record (fail-closed on the server's
+read path), so "corruption at position N" ⇒ "N−1 echoes", which is exactly what
+every cell shows. CSV evidence: `tools/negative_matrix_results.csv`
+(80 rows). Summary evidence: `matrix_full_run.log` (scratch working dir).
+
+**Harness fixes this re-run required (both committed in `fb8ff0f`):**
+1. *Server read buffer.* The echo loop used a 64-byte read buffer and 20
+   iterations. A 1000-byte record is consumed in 16 chunked reads, so records
+   3–10 of the 10-message stream were **never read** — a corruption targeting
+   position 5 or 10 was never even decrypted, and the echo count (fed by
+   record-1/2 chunks) stayed at 10, producing false FAILs. The buffer is now
+   1200 bytes (`msgLoop` 30): one read consumes one full record, so every
+   corrupted record is actually exercised. (This is a harness fix only — the
+   record layer's rejection behavior was never in doubt; the corrupted records
+   simply went unread.)
+2. *Proxy verdict-line race.* The proxy wrote the `action=` line *after* its
+   evidence-file I/O. For position 10 (the client's last record) the orchestrator
+   killed the proxy the instant the client exited, occasionally before the line
+   was written (act=0 false negatives). The `action=` line is now written and
+   flushed *before* any file I/O.
+
 **Established (reviewer-proof):** for both small and large records the server
 verifies the Ascon AEAD tag on every application record — a single flipped tag
 bit drops the record (echo count falls below 10), and `flood` (every record
@@ -490,55 +523,75 @@ record end-to-end (R1), (c) actively rekeys under a sustained forgery flood to
 limit the impact of any accepted ciphertext (R2), and (d) survives a 3000-datagram
 malformed-input fuzz without crashing or wedging (R6).
 
-## 11. R7 — Cross-Stack Interop Baseline (OpenSSL / Standard Suite)
+## 11. R7 — Cross-Stack Interop (picotls × wolfSSL, TLS 1.3)
 
-Goal: anchor the 0x006E evaluation against a *second, independent* DTLS 1.3
-implementation (OpenSSL), so correctness is not judged solely by our own wolfSSL
-fork.
+Goal: anchor the 0x006E evaluation against a *second, independent* TLS 1.3
+implementation, so correctness is not judged solely by our own wolfSSL fork.
 
-**Blocked at the OpenSSL boundary.** OpenSSL 3.4.0 (`C:\msys64\ucrt64\bin\openssl.exe`)
-exposes `-dtls`, `-dtls1`, `-dtls1_2` on its CLI but **not** `-dtls1_3`
-(`openssl s_server -dtls1_3` → `Unknown option: -dtls1_3`). More fundamentally,
-stock OpenSSL does not implement the Ascon suites at all, so a cross-stack Ascon
-handshake is definitionally impossible with it. **True cross-stack Ascon interop is
-therefore out of scope** for this evaluation.
+**Result: VERIFIED.** A full TLS 1.3 PSK handshake and application-data
+round-trip now succeed between two independently developed stacks:
 
-**wolfSSL↔wolfSSL standard-suite fallback.** To at least exercise a stock DTLS 1.3
-path, `tools/dtls_std_server.c` / `dtls_std_client.c` were built from the same
-sources with the cipher forced to `TLS_AES_128_GCM_SHA256` only. Result: the client
-offers both `TLS13-AES128-GCM-SHA256` and `TLS13-ASCONAEAD128-ASCONHASH256`; the
-server **selects `TLS13-AES128-GCM-SHA256`** in its HelloRetryRequest, then the
-**server emits an `illegal_parameter` alert (error -313) and aborts** the
-handshake. Interpretation: in this Ascon-customized fork only the Ascon suite
-(`0x006E`) is exercised end-to-end; the stock AES-GCM DTLS 1.3 path is not wired
-for the evaluation build (which is purpose-built for the Ascon evaluation, not as a
-general DTLS 1.3 server).
+* **Server**: this wolfSSL fork, `tools/tls13_psk_server.c`, suite
+  `TLS13-ASCONAEAD128-ASCONHASH256` (0x006E), PSK-only (`psk_ke`),
+  identity `Client_identity`.
+* **Client**: **picotls** (h2o's TLS 1.3 implementation, MIT, the stack
+  underlying h2o and quicly), `tools/picotls_psk_client.c` + the Ascon
+  AEAD/hash added in commit `14fd7eb` (`lib/cifra/ascon.c`).
+* Handshake: `HANDSHAKE OK. cipher id=0x006e name=TLS13-ASCONAEAD128-ASCONHASH256`
+  on both sides; application data: client `ping` → server echo, verified
+  multiple clean runs (logs: `srvF1/F2.err`, `clientF1/F2.txt`, scratch
+  working dir).
 
-**Where R7's conformance anchor actually lives.** Because a second Ascon-capable
-stack is unavailable, R7's goal is satisfied by the *canonical-spec* evidence
-instead: R8 (wolfSSL's Ascon-AEAD128 / Ascon-Hash256 reproduce the official
-`github.com/ascon/ascon-c` reference KAT vectors bit-exactly) plus wolfSSL's own
-`testwolfcrypt` Ascon self-tests. The evaluation thus validates (i) the Ascon
-primitive against its specification (R8), and (ii) DTLS 1.3 protocol behaviors
-(rejection, rekey, parser robustness) against our fork (R1/R2/R6) — rather than
-against a second vendor stack.
+picotls implements no DTLS transport, so the interop is TLS 1.3 over TCP;
+DTLS 1.3 cross-stack remains definitionally impossible on this host (see below).
 
-**Base-stack sanity check (stock DTLS 1.3 AES-GCM works).** To show the earlier
-`illegal_parameter` was an *Ascon-fork* artifact and not a defect in the underlying
-wolfSSL DTLS 1.3 stack, the fork was checked out at its immediate pre-Ascon parent
-(`ac01707`, a stock "release" merge), rebuilt with `HAVE_ASCON` disabled, and the
-same `dtls_std_{server,client}` probe (`TLS_AES_128_GCM_SHA256`) was run through the
-proxy path. Result: `HANDSHAKE OK, cipher: TLS_AES_128_GCM_SHA256`, the server
-decrypted the application record (`ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEF`) and echoed it
-back. So the base DTLS 1.3 record/key path in upstream wolfSSL is sound; Ascon is a
-clean add-on on top of it. (The fork's working tree and `user_settings.h` were
-restored to the committed Ascon state after the test.)
+**What the interop caught (bugs found in both stacks).** Cross-stack testing is
+only as strong as the bugs it flushes out — this exercise found and fixed real
+defects that single-stack self-tests had missed:
+
+1. *wolfSSL — per-record key/IV wipe.* `wc_AsconAEAD128_Clear()` was called at
+   the end of `EncryptFinal`/`DecryptFinal`, and `Init` zeroed the whole context
+   (including the IV `keys.c` had copied in once at `SetKeysSide`). Every record
+   after sequence 0 encrypted/decrypted with a zeroed IV. Fixed in commit
+   `9fd500a`: `Init` preserves `iv[0]/iv[1]` across the memset, the
+   `Clear()` calls are removed, and the record layer reads `ctx->iv`
+   (per-epoch values installed by `keys.c`).
+2. *picotls — non-streaming AEAD update.* The initial Ascon port treated each
+   `ptls_aead_encrypt_update` call as offset 0; picotls' fusion path
+   (`ptls_aead__do_encrypt_v`) splits one record into several update calls
+   (e.g. the 37-byte Finished arrived as 36+1). Every client record carried a
+   tag neither implementation's core could reproduce — valid plaintext, wrong
+   tag. Fixed in `14fd7eb` by rewriting both update functions to stream partial
+   blocks exactly like wolfSSL (leftover continuation, in-place ciphertext
+   buffer on decrypt).
+3. *picotls — PSK-only handshake plumbing.* The `key_share` extension and the
+   `psk_dhe_ke` advertisement must be emitted only when a key-exchange is
+   configured; a PSK-only `ctx->key_exchanges == NULL` client otherwise sends a
+   key_share it cannot complete. Also: HMAC keys longer than the 8-byte
+   Ascon-Hash256 block size must be hashed down before use (mirrors wolfSSL).
+
+**OpenSSL remains blocked.** OpenSSL 3.4.0
+(`C:\msys64\ucrt64\bin\openssl.exe`) exposes `-dtls`, `-dtls1`, `-dtls1_2` on its
+CLI but **not** `-dtls1_3` (`openssl s_server -dtls1_3` → `Unknown option:
+-dtls1_3`), and stock OpenSSL implements no Ascon suites. So an
+OpenSSL-bound cross-stack Ascon handshake is impossible on this host; picotls
+fills the "second, independent implementation" role for TLS 1.3.
+
+**wolfSSL↔wolfSSL DTLS 1.3 regression (post-commit).** After the wolfSSL fixes
+were committed (`9fd500a`) and the DLL rebuilt, the DTLS 1.3 0x006E PSK
+server↔client pair (`tools/dtls13_psk_{server,client}.c`) was re-run against the
+committed DLL: `HANDSHAKE OK. cipher: TLS_ASCONAEAD128_ASCONHASH256` on both
+sides and a correct 32-byte echo (logs: `dtls_srv.out`,
+`dtls_cli.out`, 18-08). The record-layer fixes required for the picotls interop
+do not regress the DTLS path.
 
 **Conclusion (R1+R2+R6+R7+R8).** The 0x006E record layer (a) is bit-exact with the
 standardized Ascon specification (R8), (b) rejects every tag-corrupted or replayed
 record end-to-end (R1), (c) actively rekeys under a sustained forgery flood (R2),
 (d) survives a 3000-datagram malformed-input fuzz without crashing or wedging (R6),
-(e) is documented as out-of-scope for cross-stack interop because no second
-Ascon-capable DTLS 1.3 implementation is available on the build host (R7), and (f)
-sits on a verified-sound base DTLS 1.3 stack (stock AES-GCM handshake completes at
-the pre-Ascon commit `ac01707`).
+(e) completes a full TLS 1.3 handshake + application round-trip against an
+independent second stack (picotls) with suite 0x006E (R7), and (f) sits on a
+verified-sound base DTLS 1.3 stack (stock AES-GCM handshake completes at the
+pre-Ascon commit `ac01707`). Cross-stack DTLS 1.3 interop stays out of scope:
+picotls has no DTLS transport and OpenSSL 3.4.0 offers neither `-dtls1_3` nor
+Ascon suites.
