@@ -84,9 +84,10 @@
   `Dtls13CheckAEADFailLimit()` `dtls13.c:3250-3255`). 2^16 is stricter than
   2^48; at 2^16 failed attempts the cumulative forgery advantage is
   2^16 / 2^128 = 2^-112, far below the 2^-60 rule of thumb. The 2^48 protocol
-  cap remains the theoretical maximum. The choice between the implemented 2^16
-  and the design's literal 2^48 is a paper-claims decision, not a correctness
-  one (see `dtls13-ascon-validation.md` §4.3).
+  cap remains the theoretical maximum. **RESOLVED (option a):** keep 2^16/2^15
+  in the reference implementation; the design's 2^48 stays the protocol max. This
+  is a paper-claims decision, not a correctness one (see
+  `dtls13-ascon-validation.md` §4.3).
 
 Derivation:
 - Confidentiality: Ascon-128 has r=64, c=256. PRF-indistinguishability advantage ~ q_b^2/2^256 + q/2^128 (q_b = rate blocks). At protocol max (2^62 bytes ~ 2^59 blocks): 2^118/2^256 = 2^-138. Not binding.

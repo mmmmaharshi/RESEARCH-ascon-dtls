@@ -21,6 +21,7 @@ The implementation uses:
 - A 16-byte TLS 1.3 nonce.
 - A keyed Ascon permutation for DTLS record-number masking.
 - DTLS usage limits of 2^48 records and 2^48 failed authentications.
+- Reference implementation enforces stricter wolfSSL defaults (2^16 failed-auth / 2^15 key-update); 2^48 stays the protocol max.
 
 ## Verified results
 
@@ -77,7 +78,8 @@ Under these assumptions:
 - The mask key is separate from the traffic key. Therefore, the mask does not
   add a second input path to the Ascon AEAD security argument.
 - The protocol limits of 2^48 records and 2^48 failed authentications bind
-  before the estimated Ascon construction limits.
+  before the estimated Ascon construction limits. The reference implementation
+  enforces stricter 2^16 / 2^15 defaults (2^-112 forgery); 2^48 stays the max.
 - The analysis does not prove a new AEAD mode. It applies existing AEAD
   bounds to the DTLS state machine and gives a bounded PRF argument for the
   record-number mask.

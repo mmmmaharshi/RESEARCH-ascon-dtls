@@ -19,7 +19,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 | # | Claim | Basis | Bound at usage limit |
 |---|-------|-------|----------------------|
 | C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
-| C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key) |
+| C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
 | C3 | Channel security (Robust Channels goals) | Paper proof, reduction to Ascon-AEAD128 + state-machine invariants | Same as C1/C2 |
 | C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
 | C5 | Committing security (defense-in-depth) | KSW 2023/1525 (TOSC 2024) prove Ascon committing-secure (unmodified; one of only 3 finalists with a proof). Exact bound: quote theorem from PDF at write time — safe margin: our usage (≤ 2^48 records/key) is far below any candidate bound (2^64–2^96), so the claim does not depend on the exact value. Zero-padding caveat (Datta et al. 2026/1160) does NOT apply: those results target the committing zero-padding TRANSFORM on finalists; our nonce padding is the RFC 9147 64→128-bit nonce padding, a different mechanism | Applied, not derived |
@@ -47,6 +47,9 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
   for HKDF (cited).
 - Usage limits of §4.3 are protocol-set (non-binding for Ascon); implementation
   MUST count failed authentications per key and key-update per RFC 9846 §5.5/§4.7.3.
+  The reference implementation enforces the stricter wolfSSL defaults 2^16 hard /
+  2^15 key-update (`DTLS_AEAD_ASCON_FAIL_LIMIT` / `DTLS_AEAD_ASCON_FAIL_KU_LIMIT`),
+  giving cumulative forgery ≤ 2^-112; 2^48 remains the protocol maximum.
 
 ## 5. Verification status (all three items closed)
 

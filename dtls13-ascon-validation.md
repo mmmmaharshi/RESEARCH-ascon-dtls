@@ -168,7 +168,7 @@ Cases A→B share the key but differ in ciphertext and produce **different** mas
 → confirms ciphertext-dependence (the property the design requires). Case C is
 the all-zero-ciphertext (retransmitted empty-plaintext record) vector.
 
-### 4.3 Usage limits — IMPLEMENTED, value deviation (decision needed)
+### 4.3 Usage limits — IMPLEMENTED (resolved: option a)
 
 Failed-authentication counting and forced key-update are wired:
 `Dtls13CheckAEADFailLimit()` (`wolfssl/src/dtls13.c:3220`) has a
@@ -192,8 +192,10 @@ cumulative forgery advantage is 2^16 / 2^128 = 2^-112, far below the 2^-60
 rule of thumb. However it contradicts the paper's stated "limits are set by the
 protocol cap (2^48), not by Ascon's bounds" narrative.
 
-**Decision for the paper:** either (a) keep the implementation's 2^16/2^15 and
-update §4.3 to say "reference implementation enforces 2^16 (stricter than the
-2^48 protocol cap); forgery advantage ≤ 2^-112", or (b) raise the constants to
-2^48 to match the design's literal bound. Both are cryptographically sound; the
-choice is a paper-claims decision, not a correctness one.
+**Decision (RESOLVED — option a):** keep the implementation's 2^16 hard / 2^15
+key-update limits. The reference implementation enforces 2^16 (stricter than the
+2^48 protocol cap); cumulative forgery advantage ≤ 2^-112. The 2^48 protocol cap
+remains the theoretical maximum and is unchanged in the design. Both options were
+cryptographically sound; this is a paper-claims choice, not a correctness one.
+`design-01-record-layer.md` §4.3 and `M2-bounded-security-claim.md` §2/C7/§4 are
+updated to match.
