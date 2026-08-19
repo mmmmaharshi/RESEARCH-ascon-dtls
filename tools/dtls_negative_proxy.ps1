@@ -109,6 +109,14 @@ try {
                 # Corrupt the Nth distinct app record and every retransmit of it.
                 $isTarget = ($Mode -eq 'flood') -or ($targetId -ne $null -and $recId -eq $targetId)
                 if ($isTarget) {
+                    # Log the action FIRST: the matrix kills this proxy the
+                    # moment the client exits, and for the last record the
+                    # file I/O below can cost the log line (act=0 false
+                    # negatives on pos=10). Flush so the redirected stdout
+                    # keeps the verdict line even on a force-kill.
+                    $hLen = [Math]::Min(16, $bytes.Length); $oh = ($bytes[0..($hLen - 1)] | ForEach-Object { '{0:x2}' -f $_ }) -join ''
+                    "action=$Mode,idx=$qualifyingCount,client_packet=$clientPackets,length=$($bytes.Length),out_head=$oh"
+                    [Console]::Out.Flush()
                     # Corrupt a byte INSIDE the first record's AEAD region.
                     # The DTLS 1.3 unified header has a VARIABLE length: the
                     # sequence number is encoded in 1-4 bytes by value, so a
@@ -130,9 +138,9 @@ try {
                         'sequence' { $out[2] = $out[2] -bxor 1 }
                         'epoch'    { $out[0] = $out[0] -bxor 1 }
                     }
-                    $hLen = [Math]::Min(16, $out.Length); $oh = ($out[0..($hLen - 1)] | ForEach-Object { '{0:x2}' -f $_ }) -join ''
                     $otHex = if ($out.Length -ge 16) { ($out[($out.Length - 16)..($out.Length - 1)] | ForEach-Object { '{0:x2}' -f $_ }) -join '' } else { '' }
-                    "action=$Mode,idx=$qualifyingCount,client_packet=$clientPackets,length=$($bytes.Length),sent_length=$($out.Length),out_head=$oh,out_tail=$otHex"
+                    "action-tail,sent_length=$($out.Length),out_tail=$otHex"
+                    [Console]::Out.Flush()
                     [System.IO.File]::WriteAllText("$env:TEMP\ascon-dtls-work\tamper_out_$clientPackets.hex", ($out | ForEach-Object { $_.ToString('x2') }) -join '')
                 }
                 else {

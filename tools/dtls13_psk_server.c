@@ -109,8 +109,12 @@ int main(int argc, char** argv)
      * repeated authentication failures (e.g. a flood of corrupted records)
      * accumulate and trip the forced-KeyUpdate path. */
     {
-        char buf[64];
-        int msgLoop = 20;
+        /* buf must hold one full application record (negative-matrix sizes go
+         * up to 1000 bytes); a 64-byte buffer chunked reads across records and
+         * left later records unread, so corruption of those records was never
+         * exercised by the harness. */
+        char buf[1200];
+        int msgLoop = 30;
         int i;
         if (argc > 3) msgLoop = atoi(argv[3]);
         for (i = 0; i < msgLoop; i++) {
