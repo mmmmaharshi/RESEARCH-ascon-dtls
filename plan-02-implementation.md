@@ -43,8 +43,10 @@
 2. KeyUpdate mid-connection — *follow-up*: forced-KeyUpdate path (`Dtls13CheckAEADFailLimit` 2^15 → `dtls13DoKeyUpdate`) implemented + unit-reachable but not driven by the proxy harness
 3. Generate own record-layer test vectors — *follow-up*: mask vectors produced (tools/ascon_mask_kat.c); full-record AEAD encrypt/decrypt vectors pending
 
-**M2.5 X.509 mode with Ascon-Hash256 (optional, 1-2 wks)**
-- CertificateVerify + signature schemes hash — scope creep guard: keep as stretch; PSK-only covers the paper's claims
+**M2.5 X.509 mode with Ascon-Hash256 — DONE (validation §6)**
+- Mutual RSA-PSS cert auth over DTLS 1.3 0x006E; CertificateVerify signs over the
+  Ascon-Hash256 transcript; only residual SHA-256 is the RSA-PSS *scheme* hash
+  (by-design, RFC 8446 §4.2.3). PSK path still the primary paper claim.
 
 ## 3. Milestones
 
@@ -54,7 +56,7 @@
 | M2.2 | PSK-mode DTLS 1.3 handshake + data with 0x006E |
 | M2.3 | Mask + accounting working, negative tests pass |
 | M2.4 | Loss/reorder negative-proxy harness green (VERIFIED §5); KeyUpdate-path + own vectors = follow-ups |
-| M2.5 | (optional) X.509 mode |
+| M2.5 | X.509 cert-mode 0x006E handshake (RSA-PSS, Ascon-Hash256) — DONE (§6) |
 
 ## 4. Risks
 

@@ -3,9 +3,9 @@
 **Status:** validated end-to-end on Windows/desktop (loopback UDP).
 **Date:** 2026-08-14
 **Scope:** M2.1 + M2.2 verification (suite wiring, PSK handshake, handshake-hash
-binding to Ascon-Hash256), M2.3 (record-layer mask/nonce/usage-limits), and
-M2.4 (full negative-proxy matrix — observe/tamper/replay/truncate/sequence/epoch —
-via `tools/dtls_negative_proxy.ps1`). See §5.
+binding to Ascon-Hash256), M2.3 (record-layer mask/nonce/usage-limits), M2.4
+(full negative-proxy matrix — observe/tamper/replay/truncate/sequence/epoch — via
+`tools/dtls_negative_proxy.ps1`), and M2.5 (X.509 cert-mode handshake). See §5–§6.
 
 ## Build recipe
 
@@ -271,3 +271,44 @@ record reached the server's plaintext path.
 long burst of failing records rather than a single mutation; it is implemented
 and unit-reachable but not driven here. Device-side Renode record-path
 benchmarking remains future work.
+
+## 6. X.509 cert-mode handshake (M2.5) — VERIFIED
+
+Topology: `dtls13_cert_client.exe 127.0.0.1 <L>` → `dtls_negative_proxy.ps1`
+(observe) → `dtls13_cert_server.exe 11111`. Both endpoints pin
+`TLS13-ASCONAEAD128-ASCONHASH256` and present RSA certificates (server:
+`server-cert.pem`/`server-key.pem`; client: `client-cert.pem`/`client-key.pem`).
+Certs are verified against `ca-cert.pem` (server side) and `client-ca-cert.pem`
+(client side) — a test-CA trust fix (the client cert is self-signed under
+`O=wolfSSL_2048`, not the Sawtooth `ca-cert.pem` root).
+
+Result (both directions):
+```
+SERVER: HANDSHAKE OK. cipher: TLS_ASCONAEAD128_ASCONHASH256
+        got: ascon-dtls cert message
+CLIENT: HANDSHAKE OK. cipher: TLS_ASCONAEAD128_ASCONHASH256
+        echo ok: ascon-dtls cert message
+```
+
+Debug confirms:
+- `Verified Peer's cert` on **both** directions (mutual X.509 auth).
+- Every key-derivation / HKDF step reports `Digest 21` (= Ascon-Hash256) —
+  the handshake **transcript hash** for 0x006E is Ascon-Hash256.
+- The RSA-PSS `CertificateVerify` signs over the Ascon-Hash256 transcript
+  (`ConfirmSignature`/`RsaVerify` succeed after the `ASCON-HASH256` HashRaw
+  lines).
+- Record protection uses `wc_AsconAEAD128` with the mask keys provisioned
+  (`Provisioning Ascon Record Number enc/dec key`).
+
+**SHA-256 residual (by design, not a violation):** the `Sha256` lines in the
+debug are (a) wolfSSL's diagnostic forensic dump of every hash, and (b) the
+**RSA-PSS signature *scheme* hash** — TLS 1.3 fixes the signature-algorithm
+hash independently of the handshake transcript hash (RFC 8446 §4.2.3). The
+handshake *transcript* hash that drives CertificateVerify, Finished, and all
+key schedule steps is Ascon-Hash256. This matches `design-01-record-layer.md`
+Q1 ("no SHA-256 in the handshake hash") — the only SHA-256 is the per-scheme
+signature constant.
+
+**Conclusion:** M2.5 (X.509 cert-mode DTLS 1.3 with 0x006E) works end-to-end:
+mutual certificate authentication, Ascon-Hash256 transcript hash, Ascon AEAD
+record protection, and the record-number mask are all exercised.
