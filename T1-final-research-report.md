@@ -39,6 +39,7 @@ The implementation uses:
 | Cortex-M0 cycle test | Run in Renode (Cortex-M0+ @32MHz): ASCON-AEAD128 0.338 MiB/s vs AES-128-GCM 0.071 MiB/s (~4.8× faster). See `renode-benchmark-results.md`. |
 | Cortex-M3 cycle test | Run in Renode (Cortex-M3 @32MHz): ASCON-AEAD128 0.585 MiB/s vs AES-128-GCM 0.166 MiB/s (~3.5× faster); ChaCha20-Poly1305 2.725 MiB/s (~16× faster than AES-GCM). See `renode-benchmark-results.md`. |
 | X.509 mode with peer verification enabled | PASS |
+| Forced KeyUpdate on failed authentication (RFC 9846 §4.7.3) | PASS |
 
 The final PSK test produced:
 
@@ -109,6 +110,7 @@ record. The valid baseline completed the handshake and encrypted echo.
 | Sequence change | Changed one byte of the 16-bit wire record number in the 5-byte unified header | Handshake passed; no echo was accepted |
 | Epoch change | Changed one epoch bit in byte 0 of the 5-byte unified header | Handshake passed; no echo was accepted |
 | Replay | Sent the same encrypted application record twice | Handshake and one echo passed; server delivered one message |
+| KeyUpdate | Corrupted 14 consecutive post-handshake app records | Failed-auth counter tripped; server issued KeyUpdate |
 
 The tamper, truncation, sequence, and epoch tests show that invalid
 application records did not reach the server application. The replay test
@@ -133,6 +135,28 @@ from 100 to 20 for the short mode. This changed the wrong-epoch test from
 about 8 to 9 seconds to about 2.8 seconds. Normal runs without the flag keep
 the original behavior and the full retry count. The valid baseline without
 the flag still completed in about 1.25 seconds with the encrypted echo.
+
+## Forced KeyUpdate result
+
+The DTLS 1.3 failed-authentication counter (`dropCount`) increments on every
+rejected record via `Dtls13CheckAEADFailLimit`. When `dropCount` exceeds
+`keyUpdateLimit` (the reference enforces the stricter wolfSSL default of 2^15
+failed authentications), the receiving peer issues a KeyUpdate
+(`dtls13DoKeyUpdate = 1` -> `SendTls13KeyUpdate`).
+
+The negative proxy (`tools/dtls_negative_proxy.ps1`) in flood mode corrupted 14
+consecutive post-handshake client application records (client_packet 4-17,
+lengths 35-46 bytes). With the limit temporarily set to 0, the first dropped
+record tripped the path. The server log showed, per dropped record,
+`DTLS: Ignoring failed decryption`, then
+`Connection exceeded key update limit. Issuing key update`, followed by
+`wolfSSL Entering SendTls13KeyUpdate` / `wolfSSL Leaving SendTls13KeyUpdate,
+return 0`. Full capture: `tools/keyupdate-evidence.txt`.
+
+This work also hardened the proxy harness: the DTLS 1.3 outer record header is
+not 0x17 (so app-record selection must use packet order, not the type byte); a
+deleted `$out` initialization that crashed every relay was restored; and
+`Start-Job` stderr capture was added so wolfSSL debug logging is preserved.
 
 ## Software benchmark
 
