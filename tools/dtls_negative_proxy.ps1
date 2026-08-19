@@ -31,13 +31,16 @@ try {
             if ($null -ne $client) {
                 [void]$udp.Send($bytes, $bytes.Length, $client)
             }
-            if ($Mode -eq 'observe') { "s2c,$serverPackets,$($bytes.Length)" }
+            "s2c,serverPkt=$serverPackets,len=$($bytes.Length)"
             continue
         }
 
         $client = [System.Net.IPEndPoint]::new($from.Address, $from.Port)
         $clientPackets++
         $out = $bytes
+        # DIAGNOSTIC: log every received datagram (client + server) so we can
+        # see how wolfSSL actually fragments the handshake/app traffic.
+        "rcv,fromport=$($from.Port),len=$($bytes.Length),clientPkt=$clientPackets"
 
         # The custom client sends the application record after four or more
         # client-to-server handshake records. Select the first later record.

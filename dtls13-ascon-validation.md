@@ -266,18 +266,20 @@ dropped, delivered exactly once), and (c) header/record-number integrity
 (sequence/epoch mutations rejected). No corrupted or duplicated application
 record reached the server's plaintext path.
 
-**Forced-KeyUpdate path (M2.4 follow-up):** Verified in source — `dtls13.c`
+**Forced-KeyUpdate path (M2.4 follow-up): EXERCISED end-to-end.** `dtls13.c`
 wires `keyUpdateLimit = DTLS_AEAD_ASCON_FAIL_KU_LIMIT (2^15)` for the Ascon suite
-and `Dtls13CheckAEADFailLimit()` sets `dtls13DoKeyUpdate = 1` (logged via
-`SendTls13KeyUpdate`) on breach. A proxy flood mode to drive it end-to-end was
-implemented and hardened (DTLS 1.3 app-record detection, flood gate, log
-capture, correct exe paths), but the runtime drive was not captured this
-session: harness orchestration was unstable (stale-proxy port holdover; wolfSSL
-batches app records into few UDP datagrams, below the per-datagram corruption
-threshold). The path is correct by construction and unit-reachable; a clean
-runtime drive is a follow-up (temporarily lower the limit and re-run
-`_ku_test.ps1`). Device-side Renode record-path benchmarking remains future
-work.
+and `Dtls13CheckAEADFailLimit()` increments `dropCount` and sets
+`dtls13DoKeyUpdate = 1` on breach, which drives `SendTls13KeyUpdate`. Runtime
+proven: with the limit temporarily lowered to 0, `dtls_negative_proxy.ps1` in
+flood mode corrupted 14 post-handshake client app records (client_packet >= 4);
+the server logged `DTLS: Ignoring failed decryption` per record,
+`Connection exceeded key update limit. Issuing key update`, and
+`wolfSSL Entering/Leaving SendTls13KeyUpdate` — i.e. the forced KeyUpdate was
+actually emitted. Evidence: `tools/keyupdate-evidence.txt`. (The proxy harness
+was hardened to fix three real DTLS 1.3 bugs: the outer record header is not
+0x17 in DTLS 1.3, a deleted `$out` init that crashed every relay, and
+Start-Job stderr capture.) Device-side Renode record-path benchmarking remains
+future work.
 
 ## 6. X.509 cert-mode handshake (M2.5) — VERIFIED
 

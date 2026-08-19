@@ -1,0 +1,50 @@
+=== Forced-KeyUpdate drive evidence (TLS13-ASCONAEAD128-ASCONHASH256 / 0x006E, DTLS 1.3) ===
+Config: DTLS_AEAD_ASCON_FAIL_KU_LIMIT temporarily lowered to 0 (trip on first dropped record).
+
+--- Proxy: flooded client app records (post-handshake, client_packet >= 4) ---
+action=flood,client_packet=4,length=46,sent_length=46
+action=flood,client_packet=5,length=35,sent_length=35
+action=flood,client_packet=6,length=40,sent_length=40
+action=flood,client_packet=7,length=35,sent_length=35
+action=flood,client_packet=8,length=40,sent_length=40
+action=flood,client_packet=9,length=35,sent_length=35
+action=flood,client_packet=10,length=35,sent_length=35
+action=flood,client_packet=11,length=35,sent_length=35
+action=flood,client_packet=12,length=35,sent_length=35
+action=flood,client_packet=13,length=40,sent_length=40
+action=flood,client_packet=14,length=35,sent_length=35
+action=flood,client_packet=15,length=35,sent_length=35
+action=flood,client_packet=16,length=35,sent_length=35
+action=flood,client_packet=17,length=35,sent_length=35
+
+--- Server: per-record decrypt failures + KeyUpdate issuance ---
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+wolfSSL Entering SendTls13KeyUpdate
+wolfSSL Leaving SendTls13KeyUpdate, return 0
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption
+Connection exceeded key update limit. Issuing key update
+DTLS: Ignoring failed decryption

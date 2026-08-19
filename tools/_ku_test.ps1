@@ -31,7 +31,7 @@ $proxyJob = Start-Job -ScriptBlock {
 $srvJob = Start-Job -ScriptBlock {
     param($exe, $lib)
     $env:PATH = "$lib;$env:PATH"
-    & $exe 13111 20
+    & $exe 13111 20 *>&1
 } -ArgumentList $server, $lib
 
 Start-Sleep -Seconds 3
@@ -41,7 +41,7 @@ Start-Sleep -Seconds 3
 $clientJob = Start-Job -ScriptBlock {
     param($exe, $lib)
     $env:PATH = "$lib;$env:PATH"
-    & $exe 127.0.0.1 13000 10 --short-timeout
+    & $exe 127.0.0.1 13000 10 --short-timeout *>&1
 } -ArgumentList $client, $lib
 Start-Sleep -Seconds 25
 
@@ -52,7 +52,7 @@ Receive-Job $srvJob   | Set-Content $srvLog
 Write-Output "=== PROXY (lines=$((Get-Content $proxyLog -Raw -ErrorAction 0 | Measure-Object -Line).Lines)) ==="
 Get-Content $proxyLog -Raw
 Write-Output "=== SERVER (KeyUpdate?) ==="
-Get-Content $srvLog -Raw | Select-String -Pattern "HANDSHAKE OK|SendTls13KeyUpdate|dropCount|Dtls13CheckAEADFailLimit|got app|read fail|bad record"
+Get-Content $srvLog -Raw | Select-String -Pattern "HANDSHAKE OK|SendTls13KeyUpdate|dropCount|Dtls13CheckAEADFailLimit|exceeded key update limit|Ignoring failed decryption|got app|read fail|bad record"
 Write-Output "=== CLIENT ==="
 Get-Content $cliLog -Raw | Select-String -Pattern "HANDSHAKE OK|echo ok|write|connect fail"
 
