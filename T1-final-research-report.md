@@ -56,35 +56,83 @@ HANDSHAKE OK. cipher: TLS_ASCONAEAD128_ASCONHASH256
 got: ascon-dtls test message
 ```
 
-## Bounded security analysis
+## Final security proof
 
-The record-layer claim has the following scope.
+The one-sentence claim: ciphersuite 0x006E provides DTLS 1.3 record security
+that reduces to the AEAD bounds of Ascon-AEAD128 (SP 800-232), with channel
+security argued in the Robust Channels model, record numbers hidden per
+RFC 9147 §4.2.3 by a new ciphertext-dependent keyed-sponge PRF, and key
+derivation via HKDF instantiated with HMAC-Ascon-Hash256 — subject to the
+bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.md`.)
 
-Assume:
+### Claims the paper proves
 
-1. Ascon-AEAD128 has its stated confidentiality and integrity bounds.
-2. Each traffic key has unique nonces.
-3. DTLS sequence numbers do not repeat in one epoch.
-4. The DTLS anti-replay window works as specified.
-5. HMAC-Ascon-Hash256 has the normal HMAC security reduction when the hash
-   acts as a suitable keyed-hash construction.
-6. The record-number mask uses an independent `sn_key`.
+| # | Claim | Basis | Bound at usage limit |
+|---|-------|-------|----------------------|
+| C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
+| C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
+| C3 | Channel security (Robust Channels goals) | Paper proof, reduction to Ascon-AEAD128 + state-machine invariants | same as C1/C2 |
+| C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
+| C5 | Committing security (defense-in-depth) | KSW 2023/1525 (TOSC 2024) prove Ascon committing-secure (one of only 3 finalists with a proof) | Applied, not derived |
+| C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. BCK96 (CRYPTO 1996) + sponge indifferentiability (Bertoni et al., EUROCRYPT 2008) + FIPS 198-1/202 precedent | structure identical to RFC 9846 |
+| C7 | Mask PRF soundness | Keyed-sponge refs: Mennink ToSC 2018/449; Dobraunig–Mennink ToSC 2019/573; Hosoyamada 2025/1059 (PQ) | q^2/2^192 + q/2^128 |
 
-Under these assumptions:
+### Reduction structure
 
-- A forged record is accepted only if the Ascon tag is forged or the record
-  state machine is violated.
-- The record-number mask does not reveal the sequence number to an observer
-  without `sn_key` because the mask depends on the ciphertext prefix.
-- A fixed record-number mask is not acceptable because it reveals a counter.
-- The mask key is separate from the traffic key. Therefore, the mask does not
-  add a second input path to the Ascon AEAD security argument.
-- The protocol limits of 2^48 records and 2^48 failed authentications bind
-  before the estimated Ascon construction limits. The reference implementation
-  enforces stricter 2^16 / 2^15 defaults (2^-112 forgery); 2^48 stays the max.
-- The analysis does not prove a new AEAD mode. It applies existing AEAD
-  bounds to the DTLS state machine and gives a bounded PRF argument for the
-  record-number mask.
+1. **Channel security reduces to AEAD.** Following Robust Channels
+   (Fischlin–Günther–Janson, ePrint 2020/718), built for DTLS 1.3, the
+   record layer is a secure channel under packet loss, reordering, and
+   replay-within-window when the underlying AEAD is secure and the
+   (key, nonce) state machine is sound. The Ascon-AEAD128 AE-security
+   bound (C1/C2) is the base assumption.
+2. **State-machine invariants (§4.2).** Per-epoch keys, a 64→128-bit nonce
+   padding (RFC 9147), and monotonic sequence numbers guarantee (key,
+   nonce) uniqueness within an epoch and sound anti-replay. A forged
+   record is accepted only if the Ascon tag is forged or this state
+   machine is violated.
+3. **Failed-authentication → KeyUpdate (RFC 9846 §4.7.3).** The
+   implementation counts failed authentications per key and forces a key
+   update past `DTLS_AEAD_ASCON_FAIL_KU_LIMIT` (2^15, stricter than the
+   2^48 protocol cap). This bounds an active attacker's forgery attempts
+   per key to the reference default → cumulative forgery advantage
+   ≤ 2^-112. (Exercised end-to-end: see "Forced KeyUpdate result".)
+4. **Record-number mask (§4.2.1, Option B).** Mask = Ascon-P^12(
+   domsep("RNDIMSK_") ‖ sn_key(128) ‖ ct[0..15](128) ), r=128, c=192.
+   It is a keyed-sponge PRF in `sn_key`, independent of the AEAD key, so
+   it adds no second input path into the AEAD security argument. Because
+   it is ciphertext-dependent, wire sequence numbers are pseudorandom to
+   an observer without `sn_key`; a fixed mask would leak the record count.
+   PRF bound q^2/2^192 + q/2^128 is negligible to q ≈ 2^96, far beyond
+   the 2^48 wire-sequence limit.
+5. **Committing security.** Ascon is committing-secure (KSW 2023/1525);
+   the mask uses a disjoint key, so the AEAD committing bound applies
+   unchanged. The zero-padding caveat (Datta et al. 2026/1160) targets
+   the committing zero-padding transform, not RFC 9147 nonce padding, and
+   does not apply.
+
+### Non-claims
+
+- No new AEAD theory — bounds applied from SP 800-232/KSW, not derived.
+- No key-confirmation (3SHKE) fix — committing property is
+  defense-in-depth only; key-commitment fixes live in the handshake.
+- No claim that the mask does more than RFC 9147 §4.2.3's design goal.
+- No forgery or privacy claims beyond the AEAD bounds.
+- No claims for 0x006F / 0x0070 / 0x0071.
+- No new hardware, side-channel, or handshake claims.
+
+### Security model and verification status
+
+- Model: Robust Channels; RFC 9147 adversarial setting; ideal-permutation
+  assumption on Ascon-P; keyed-sponge PRF assumption for the mask;
+  sponge-HMAC PRF assumption for HKDF.
+- KSW committing bound: proven for Ascon (TOSC 2024). The exact theorem
+  value must be quoted from the source PDF at paper-writing time; the claim
+  does not depend on it (usage 2^48 records/key is far below any candidate
+  bound 2^64–2^96).
+- Robust Channels artifacts: no published companion code; the record-layer
+  proof is re-derived in the paper (authors may be contacted for scripts).
+- Sponge-HMAC citation chain: BCK96 + sponge indifferentiability +
+  FIPS 198-1/202 approval precedent (HMAC-SHA3).
 
 ## Loss and reorder result
 
@@ -329,6 +377,11 @@ outstanding from the earlier validation.
 
 The software-validatable T1 research artifact works. It implements the
 registered Ascon DTLS 1.3 suite, completes a DTLS 1.3 PSK handshake, protects
-application data, and survives the tested loss and reorder cases. The next
-publication step is to add physical constrained-device measurements and to
-convert the bounded analysis into the final paper proof section.
+application data, and survives the tested loss, reorder, tamper, replay,
+and forced-KeyUpdate cases. The bounded analysis is now the final security
+proof section (claims C1-C7, Robust Channels reduction, keyed-sponge mask
+PRF, committing security). The remaining publication step is to add physical
+constrained-device measurements (not possible in this software-only setting;
+Renode-emulated Cortex-M0+/M3 cycle counts stand in) and to quote the exact
+KSW committing-theorem value and re-derive the Robust Channels record-layer
+proof at paper-writing time.
