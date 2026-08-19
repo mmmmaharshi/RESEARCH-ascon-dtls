@@ -663,13 +663,57 @@ key share even with `-allow_no_dhe_kex`. `psk_ke`-mode interop therefore
 remains covered by the picotls↔wolfSSL pair (R7); with OpenSSL, 0x006E is
 verified in `psk_dhe_ke` mode only.
 
+### 11.2 X.509 cert-mode cross-stack interop (OpenSSL × wolfSSL, TLS 1.3)
+
+Suite 0x006E over a full certificate handshake — RSA-PSS signatures and the
+same custom group 0x0100 (FFDHE-2048; the wolfSSL build has no ECC/X25519
+defines in `user_settings.h`, so ffdhe2048 is the shared group):
+
+* **Direction 1 — wolfSSL client → OpenSSL server.** `tools/tls13_cert_client.c`
+  (TCP adaptation of the `dtls13_cert_client.c` template; loads
+  `wolfssl/certs/client-cert.pem` + `client-key.pem`, verifies the server
+  against `ca-cert.pem`) against `openssl s_server -accept 11114 -tls1_3
+  -cert wolfssl/certs/server-cert.pem -key wolfssl/certs/server-key.pem
+  -ciphersuites TLS_ASCON_AEAD128_ASCON_HASH256`. **VERIFIED**: client
+  reaches `HANDSHAKE OK. cipher: TLS_ASCONAEAD128_ASCONHASH256`; server logs
+  shared cipher `TLS_ASCON_AEAD128_ASCON_HASH256`, signature RSA-PSS+SHA256,
+  shared group ffdhe2048, and prints the received plaintext
+  `ascon-dtls cert message` — OpenSSL decrypts the wolfSSL ASCON record
+  (24-byte payload, AAD `1703030029`, 16-byte nonce, 16-byte tag) and the
+  wolfSSL client verifies OpenSSL's encrypted records (e.g. the
+  NewSessionTicket record, tag verified, nonce per-record). Evidence:
+  `cert_srv3.out`, `cert_cli3.log` (scratch working dir).
+* **Direction 2 — OpenSSL client → wolfSSL server.** `tools/tls13_cert_server.c`
+  (echo server, requires a client certificate:
+  `WOLFSSL_VERIFY_PEER|WOLFSSL_FAIL_IF_NO_PEER_CERT`, verifies against
+  `ca-cert.pem` and `client-ca-cert.pem`) against `openssl s_client
+  -connect 127.0.0.1:11115 -tls1_3
+  -ciphersuites TLS_ASCON_AEAD128_ASCON_HASH256
+  -CAfile wolfssl/certs/ca-cert.pem -cert wolfssl/certs/client-cert.pem
+  -key wolfssl/certs/client-key.pem -verify_return_error`. **VERIFIED**:
+  OpenSSL reports `New, TLSv1.3, Cipher is TLS_ASCON_AEAD128_ASCON_HASH256`
+  and `Verify return code: 0 (ok)` (both certificate chains verified,
+  mutual auth); wolfSSL server reaches `HANDSHAKE OK. cipher:
+  TLS_ASCONAEAD128_ASCONHASH256`, logs `got: ascon-dtls cert message` and
+  echoes it; the echo arrives intact at the OpenSSL client, which then
+  closes cleanly. Evidence: `ossl_cli.out`, `wcert_srv.out/.err` (scratch
+  working dir).
+
+Note: `s_server` never echoes received plaintext by design, so Direction 1
+evidence is handshake + one-way delivery (the wolfSSL client waits on its
+echo loop until killed); the full application round-trip in cert mode is
+covered by Direction 2. No alerts, no decryption failures, no HRR in either
+direction (the wolfSSL client offers group 0x0100 in CH1; `s_client`
+accepts the server's ffdhe2048 selection).
+
 **Conclusion (R1+R2+R6+R7+R8).** The 0x006E record layer (a) is bit-exact with the
 standardized Ascon specification (R8), (b) rejects every tag-corrupted or replayed
 record end-to-end (R1), (c) actively rekeys under a sustained forgery flood (R2),
 (d) survives a 3000-datagram malformed-input fuzz without crashing or wedging (R6),
 (e) completes a full TLS 1.3 handshake + application round-trip with suite 0x006E
 against two independent second stacks — picotls (PSK-only `psk_ke`) and a patched
-OpenSSL 3.6.3 (`psk_dhe_ke`, HRR, custom group 0x0100) — and (f) sits on a
+OpenSSL 3.6.3, in PSK (`psk_dhe_ke`, HRR, custom group 0x0100) and X.509 cert
+modes (§11.1, §11.2, both directions) — and (f) sits on a
 verified-sound base DTLS 1.3 stack (stock AES-GCM handshake completes at the
 pre-Ascon commit `ac01707`; the DTLS 1.3 0x006E regression was re-verified
 19-08 against the fully fixed DLL). Cross-stack DTLS 1.3 interop stays out of
