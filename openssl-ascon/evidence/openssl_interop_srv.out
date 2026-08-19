@@ -1,0 +1,23 @@
+listening on port 11111
+HANDSHAKE OK. cipher: TLS_ASCONAEAD128_ASCONHASH256
+got: Hello Ascon TLS1.3!
+$
+read fail [1], err 6
+read fail [2], err 6
+read fail [3], err 6
+read fail [4], err 6
+read fail [5], err 6
+read fail [6], err 6
+read fail [7], err 6
+read fail [8], err 6
+read fail [9], err 6
+read fail [10], err 6
+read fail [11], err 6
+read fail [12], err 6
+read fail [13], err 6
+read fail [14], err 6
+read fail [15], err 6
+read fail [16], err 6
+read fail [17], err 6
+read fail [18], err 6
+read fail [19], err 6
