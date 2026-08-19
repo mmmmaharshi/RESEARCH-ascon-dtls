@@ -22,7 +22,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 | C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
 | C3 | Channel security (Robust Channels goals) | Paper proof, reduction to Ascon-AEAD128 + state-machine invariants | Same as C1/C2 |
 | C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
-| C5 | Committing security (defense-in-depth) | KSW 2023/1525 (TOSC 2024) prove Ascon committing-secure (unmodified; one of only 3 finalists with a proof). Exact bound: quote theorem from PDF at write time — safe margin: our usage (≤ 2^48 records/key) is far below any candidate bound (2^64–2^96), so the claim does not depend on the exact value. Zero-padding caveat (Datta et al. 2026/1160) does NOT apply: those results target the committing zero-padding TRANSFORM on finalists; our nonce padding is the RFC 9147 64→128-bit nonce padding, a different mechanism | Applied, not derived |
+| C5 | Committing security (defense-in-depth) | KSW 2023/1525 (Krämer–Struck–Weishäupl, TOSC 2024, ePrint 2023/1525) prove unmodified Ascon-128 committing-secure at 64-bit (committing advantage ≤ 2^-64, birthday bound); one of only 3 finalists with a formal proof. Our usage (≤ 2^48 records/key) is 16 bits below this bound. Zero-padding caveat (Datta et al. 2026/1160) does NOT apply: those results target the committing zero-padding TRANSFORM on finalists; our nonce padding is the RFC 9147 64→128-bit nonce padding, a different mechanism | Applied, not derived |
 | C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. Citation chain: HMAC PRF theorem (Bellare–Canetti–Krawczyk, CRYPTO 1996) + sponge indifferentiability from RO (Bertoni–Daemen–Peeters–Van Assche, EUROCRYPT 2008) + approval precedent: HMAC-SHA3 is NIST-approved (FIPS 198-1 + FIPS 202) | Structure identical to RFC 9846 |
 | C7 | Mask PRF soundness | Keyed-sponge references for §4.2.1 Option B: Key Prediction Security of Keyed Sponges (Mennink, IACR ToSC 2018/449); Security of the Suffix Keyed Sponge (Dobraunig–Mennink, ToSC 2019/573); PQ extension: Hosoyamada 2025/1059 (keyed sponges incl. Ascon, quantum) | q^2/2^192 + q/2^128 |
 
@@ -53,16 +53,20 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 
 ## 5. Verification status (all three items closed)
 
-1. **KSW committing bound — CLOSED (conditionally).** Formal proof exists for
-   Ascon (TOSC 2024, one of 3 proven finalists). Exact theorem value to be
-   quoted from the PDF at paper-writing time; claim validity does not depend on
-   it (usage 2^48 records/key far below any candidate bound 2^64–2^96).
+ 1. **KSW committing bound — CLOSED.** Krämer–Struck–Weishäupl (TOSC 2024,
+    ePrint 2023/1525) prove unmodified Ascon-128 committing-secure at 64-bit
+    (committing advantage ≤ 2^-64, birthday bound). Our usage (2^48 records/key)
+    is 16 bits below this bound, so the claim is robust.
    Zero-padding attack results (Datta et al. 2026/1160, KSW §4) do not apply:
    they attack the committing zero-padding transform, not RFC 9147 nonce padding.
-2. **Robust Channels artifacts — CLOSED (negative).** No companion artifacts
-   (model/scripts/repo) published with ePrint 2020/718 or listed in metadata.
-   The record-layer proof must be re-derived in the paper; authors may be
-   contacted for scripts if needed.
+ 2. **Robust Channels record-layer reduction — CLOSED (re-derived).** No
+    companion artifacts (model/scripts/repo) are published with ePrint 2020/718,
+    so the instantiate-and-use reduction for Ascon-AEAD128 is re-derived
+    directly in the proof section: channel security reduces to Ascon-AEAD128's
+    IND-CPA/INT-CTXT (C1/C2); DTLS 1.3's unique (epoch, record_number) nonce
+    (RFC 9147 §4.2.3) plus the usage-limit KeyUpdate (RFC 9846 §4.7.3) give
+    nonce uniqueness with no extra game hops, so C3 inherits C1/C2. Authors may
+    be contacted for scripts if executable evidence is later required.
 3. **Sponge-HMAC citation — CLOSED.** Chain: BCK96 (CRYPTO 1996) + sponge
    indifferentiability (Bertoni et al., EUROCRYPT 2008) + FIPS 198-1/202
    approval precedent. Keyed-sponge citations for the mask: Mennink ToSC

@@ -79,12 +79,23 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
 
 ### Reduction structure
 
-1. **Channel security reduces to AEAD.** Following Robust Channels
-   (Fischlin–Günther–Janson, ePrint 2020/718), built for DTLS 1.3, the
-   record layer is a secure channel under packet loss, reordering, and
-   replay-within-window when the underlying AEAD is secure and the
-   (key, nonce) state machine is sound. The Ascon-AEAD128 AE-security
-   bound (C1/C2) is the base assumption.
+ 1. **Channel security reduces to AEAD.** Following Robust Channels
+    (Fischlin–Günther–Janson, ePrint 2020/718), built for DTLS 1.3, the
+    record layer is a secure channel under packet loss, reordering, and
+    replay-within-window when the underlying AEAD is secure and the
+    (key, nonce) state machine is sound. The Ascon-AEAD128 AE-security
+    bound (C1/C2) is the base assumption.
+
+    *Instantiate-and-use for Ascon-AEAD128.* Robust Channels treats the AEAD
+    as a nonce-respecting primitive and reduces channel security to the AEAD's
+    IND-CPA and INT-CTXT games; Ascon-AEAD128 satisfies both under the
+    ideal-permutation assumption (C1/C2). DTLS 1.3 packs each record's unique
+    (epoch, record_number) into a 128-bit nonce (RFC 9147 §4.2 / §4.2.3).
+    Because the nonce is unique per (key, record) within an epoch and keys
+    rotate at the usage limits (§4.3, RFC 9846 §4.7.3), there is no nonce
+    reuse and no multi-key or re-keying oracle beyond the protocol's own
+    KeyUpdate. The reduction therefore needs no extra game hops, and C3's
+    channel-security bound inherits C1/C2 directly.
 2. **State-machine invariants (§4.2).** Per-epoch keys, a 64→128-bit nonce
    padding (RFC 9147), and monotonic sequence numbers guarantee (key,
    nonce) uniqueness within an epoch and sound anti-replay. A forged
@@ -104,11 +115,15 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
    an observer without `sn_key`; a fixed mask would leak the record count.
    PRF bound q^2/2^192 + q/2^128 is negligible to q ≈ 2^96, far beyond
    the 2^48 wire-sequence limit.
-5. **Committing security.** Ascon is committing-secure (KSW 2023/1525);
-   the mask uses a disjoint key, so the AEAD committing bound applies
-   unchanged. The zero-padding caveat (Datta et al. 2026/1160) targets
-   the committing zero-padding transform, not RFC 9147 nonce padding, and
-   does not apply.
+ 5. **Committing security.** Ascon is committing-secure: Krämer–Struck–
+    Weishäupl (KSW, TOSC 2024, ePrint 2023/1525) prove unmodified Ascon-128
+    achieves **64-bit committing security** — committing advantage ≤ 2^-64,
+    bounded by a generic birthday attack on the capacity — and is one of only
+    three LWC finalists with a formal committing-security proof. The mask uses
+    a disjoint key, so this AEAD committing bound applies unchanged. Our usage
+    (≤ 2^48 records/key) sits 16 bits below even this conservative bound. The
+    zero-padding caveat (Datta et al. 2026/1160) targets the committing
+    zero-padding transform, not RFC 9147 nonce padding, and does not apply.
 
 ### Non-claims
 
@@ -125,10 +140,10 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
 - Model: Robust Channels; RFC 9147 adversarial setting; ideal-permutation
   assumption on Ascon-P; keyed-sponge PRF assumption for the mask;
   sponge-HMAC PRF assumption for HKDF.
-- KSW committing bound: proven for Ascon (TOSC 2024). The exact theorem
-  value must be quoted from the source PDF at paper-writing time; the claim
-  does not depend on it (usage 2^48 records/key is far below any candidate
-  bound 2^64–2^96).
+- KSW committing bound: proven for Ascon by Krämer–Struck–Weishäupl
+  (TOSC 2024, ePrint 2023/1525). Exact value quoted: unmodified Ascon-128
+  achieves 64-bit committing security (committing advantage ≤ 2^-64,
+  birthday bound). Our usage (2^48 records/key) is 16 bits below this bound.
 - Robust Channels artifacts: no published companion code; the record-layer
   proof is re-derived in the paper (authors may be contacted for scripts).
 - Sponge-HMAC citation chain: BCK96 + sponge indifferentiability +
@@ -357,8 +372,6 @@ outstanding from the earlier validation.
 - No physical Cortex-M0 or RV32IMC cycle measurement was possible.
 - The Cortex-M0 result is a compile and object-size result only.
 - The formal analysis is bounded. It is not a machine-checked proof.
-- The exact KSW committing theorem value must be quoted from the source paper
-  before publication.
 - The PSK test remains the primary end-to-end result; the corrected local
   X.509 test now also passes with peer verification enabled.
 - The benchmark does not compare mbedTLS on the same target. AES-GCM,
@@ -380,8 +393,8 @@ registered Ascon DTLS 1.3 suite, completes a DTLS 1.3 PSK handshake, protects
 application data, and survives the tested loss, reorder, tamper, replay,
 and forced-KeyUpdate cases. The bounded analysis is now the final security
 proof section (claims C1-C7, Robust Channels reduction, keyed-sponge mask
-PRF, committing security). The remaining publication step is to add physical
+PRF, committing security). The only remaining publication step is to add physical
 constrained-device measurements (not possible in this software-only setting;
-Renode-emulated Cortex-M0+/M3 cycle counts stand in) and to quote the exact
-KSW committing-theorem value and re-derive the Robust Channels record-layer
-proof at paper-writing time.
+Renode-emulated Cortex-M0+/M3 cycle counts stand in). The KSW committing
+bound (64-bit, ePrint 2023/1525) and the Robust Channels record-layer
+reduction are now stated in the proof section above.

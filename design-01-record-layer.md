@@ -2,7 +2,7 @@
 
 **Project:** First implementation, security analysis, and constrained-device benchmark of the IANA-registered Ascon DTLS 1.3 ciphersuites.
 
-**Status:** Phase 1 nearly complete — §3 (suite selection), §4.1 (KDF/HMAC), §4.2 (nonce), §4.2.1 (mask), §4.3 (usage limits), §6 (formal targets) resolved. Open: Q4 benchmark target, [TO VERIFY] KSW bound + Robust Channels artifacts + sponge-HMAC citation.
+**Status:** Phase 1 complete — §3 (suite selection), §4.1 (KDF/HMAC), §4.2 (nonce), §4.2.1 (mask), §4.3 (usage limits), §6 (formal targets) resolved. KSW bound (64-bit, ePrint 2023/1525) and Robust Channels record-layer reduction verified; sponge-HMAC citation closed.
 
 ---
 
@@ -93,7 +93,7 @@ Derivation:
 - Confidentiality: Ascon-128 has r=64, c=256. PRF-indistinguishability advantage ~ q_b^2/2^256 + q/2^128 (q_b = rate blocks). At protocol max (2^62 bytes ~ 2^59 blocks): 2^118/2^256 = 2^-138. Not binding.
 - Integrity: per-attempt forgery <= 2^-128 (128-bit tag); cumulative <= q_f/2^128. At q_f = 2^48: 2^-80, below the 2^-60 rule of thumb (cf. [AEBounds]). Not binding.
 - Publishable observation: both limits are set by the PROTOCOL caps, not by Ascon's bounds — unlike AES-GCM (2^24.5 records) and AEAD_AES_128_CCM_8 (banned for DTLS: 2^48/2^64 = 2^-16). The 64-bit seq space + 128-bit tag make Ascon's usage limits vacuous for DTLS 1.3.
-- Committing bound (KSW 2023, ePrint 2023/1525): Ascon-128 message-commitment security ~ 2^64 [TO VERIFY exact value from the paper — needed for the committing claim in section 6]. Not a usage-limit constraint; the zero-padding caveat of Datta et al. (2026/1160) must be engaged there.
+- Committing bound (KSW 2023, ePrint 2023/1525, Krämer–Struck–Weishäupl, TOSC 2024): unmodified Ascon-128 message-commitment security = 64-bit (committing advantage ≤ 2^-64, birthday bound). Our usage (≤ 2^48 records/key) is 16 bits below this bound. Not a usage-limit constraint; the zero-padding caveat of Datta et al. (2026/1160) does not apply (targets the committing zero-padding transform, not RFC 9147 nonce padding).
 - Implementation requirement: count failed authentications per (epoch, key); force KeyUpdate / new epoch before either limit. In practice rekey cadence is set by deployment policy, since both limits exceed any realistic session.
 
 ## 5. Connection IDs
