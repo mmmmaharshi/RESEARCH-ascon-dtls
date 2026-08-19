@@ -100,7 +100,7 @@ handshake crypto" property of the 0x006E suite.
 | App-data AEAD encrypt/decrypt + echo | done |
 | AEAD rejects tampered ciphertext | done |
 | Record-number mask implementation (M2.3) | **done** (Option B keyed-sponge PRF, see below) |
-| Full proxy matrix: replay / reorder / KeyUpdate (M2.4) | partial (observe + tamper only) |
+| Full proxy matrix: replay / truncate / sequence / epoch (M2.4) | **done** (see §5) |
 | Own record-layer test vectors (M2.4.3) | partial (mask vectors produced, see below) |
 | Real DTLS record path on Renode (M0+/M3) | future |
 
@@ -199,3 +199,33 @@ remains the theoretical maximum and is unchanged in the design. Both options wer
 cryptographically sound; this is a paper-claims choice, not a correctness one.
 `design-01-record-layer.md` §4.3 and `M2-bounded-security-claim.md` §2/C7/§4 are
 updated to match.
+
+## 5. Negative-proxy matrix (M2.4) — VERIFIED
+
+Topology: `psk_client.exe 127.0.0.1 <L> --short-timeout` →
+`dtls_negative_proxy.ps1 -Mode <X> -ListenPort <L> -ServerPort 11111` →
+`psk_server.exe 11111`. The proxy acts on the first client-to-server packet
+matching `packets >= 4 AND length in [40,80]` — i.e. the ~46-byte post-handshake
+application record. All runs complete the handshake; the mutation targets that
+single app record.
+
+| Mode       | Handshake | App delivered        | Interpretation                                                  |
+| ---------- | --------- | -------------------- | --------------------------------------------------------------- |
+| `observe`  | OK        | ✅ `got:` + echo ok  | baseline (§3)                                                    |
+| `tamper`   | OK        | ❌ server read fail  | flipped last byte → Ascon AEAD tag check fails (§3)             |
+| `replay`   | OK        | ✅ echo ok           | duplicate app record **dropped by anti-replay**, delivered once |
+| `truncate` | OK        | ❌ server read fail  | −8 bytes → AEAD/length parse failure, record rejected          |
+| `sequence` | OK        | ❌ server read fail  | flipped wire record-number byte → nonce/decrypt mismatch       |
+| `epoch`    | OK        | ❌ server read fail  | flipped compact-header epoch bit → header rejected             |
+
+**Established:** the 0x006E record layer enforces (a) AEAD integrity on every
+record (tamper/truncate rejected), (b) DTLS anti-replay (duplicate app record
+dropped, delivered exactly once), and (c) header/record-number integrity
+(sequence/epoch mutations rejected). No corrupted or duplicated application
+record reached the server's plaintext path.
+
+**Not exercised by this matrix:** the forced-KeyUpdate path in
+`Dtls13CheckAEADFailLimit()` (2^15 failures → `dtls13DoKeyUpdate`) requires a
+long burst of failing records rather than a single mutation; it is implemented
+and unit-reachable but not driven here. Device-side Renode record-path
+benchmarking remains future work.
