@@ -1,0 +1,5 @@
+:name: bench-m0plus
+machine LoadPlatformDescription @../platforms/bench-m0plus.repl
+machine EnableSemihosting true
+sysbus LoadELF @../out/hello-m0plus.elf
+start

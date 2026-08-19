@@ -1,0 +1,5 @@
+:name: bench-m3
+machine LoadPlatformDescription @../platforms/bench-m3.repl
+machine EnableSemihosting true
+sysbus LoadELF @../out/hello-m3.elf
+start
