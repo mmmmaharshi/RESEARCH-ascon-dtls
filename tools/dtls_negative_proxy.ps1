@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('observe','tamper','replay','truncate','sequence','epoch')]
+    [ValidateSet('observe','tamper','replay','truncate','sequence','epoch','flood')]
     [string]$Mode = 'observe',
     [int]$ListenPort = 12000,
     [int]$ServerPort = 11111,
@@ -41,8 +41,23 @@ try {
 
         # The custom client sends the application record after four or more
         # client-to-server handshake records. Select the first later record.
-        $candidate = $clientPackets -ge 4 -and $bytes.Length -ge 40 -and $bytes.Length -le 80
-        if ($candidate -and $Mode -ne 'observe' -and ($Mode -ne 'replay' -or -not $changed)) {
+        # Flood mode ignores the packet count and corrupts EVERY application_data
+        # record (type 0x17) so it drives the failed-auth counter without
+        # disturbing the handshake itself.
+        $isApp = $bytes[0] -eq 0x17
+        if ($Mode -eq 'flood') {
+            # DTLS 1.3 no longer puts 0x17 in the *outer* header for app data
+            # (the real type is encrypted in the inner record), so the $isApp
+            # byte test used by the other modes is unreliable here. Instead gate
+            # purely on client packet order: packets 1-3 are the handshake
+            # flight, so anything at index >=4 is application_data. Corrupt all
+            # of those (loose length filter just avoids tiny non-record noise).
+            $candidate = $clientPackets -ge 4 -and $bytes.Length -ge 30
+        }
+        else {
+            $candidate = $clientPackets -ge 4 -and $bytes.Length -ge 40 -and $bytes.Length -le 80
+        }
+        if ($candidate -and $Mode -ne 'observe' -and ($Mode -eq 'flood' -or $Mode -ne 'replay' -or -not $changed)) {
             $changed = $true
             switch ($Mode) {
                 'tamper' {
@@ -68,6 +83,12 @@ try {
                     # bits (EE_MASK = 0x3). Change only one epoch bit.
                     $out = [byte[]]$bytes.Clone()
                     $out[0] = $out[0] -bxor 1
+                }
+                'flood' {
+                    # Corrupt EVERY qualifying record (used to drive the
+                    # forced-KeyUpdate path); same mutation as 'tamper'.
+                    $out = [byte[]]$bytes.Clone()
+                    $out[$out.Length - 1] = $out[$out.Length - 1] -bxor 1
                 }
             }
             "action=$Mode,client_packet=$clientPackets,length=$($bytes.Length),sent_length=$($out.Length)"

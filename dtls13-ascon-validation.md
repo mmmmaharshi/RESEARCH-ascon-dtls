@@ -266,11 +266,18 @@ dropped, delivered exactly once), and (c) header/record-number integrity
 (sequence/epoch mutations rejected). No corrupted or duplicated application
 record reached the server's plaintext path.
 
-**Not exercised by this matrix:** the forced-KeyUpdate path in
-`Dtls13CheckAEADFailLimit()` (2^15 failures → `dtls13DoKeyUpdate`) requires a
-long burst of failing records rather than a single mutation; it is implemented
-and unit-reachable but not driven here. Device-side Renode record-path
-benchmarking remains future work.
+**Forced-KeyUpdate path (M2.4 follow-up):** Verified in source — `dtls13.c`
+wires `keyUpdateLimit = DTLS_AEAD_ASCON_FAIL_KU_LIMIT (2^15)` for the Ascon suite
+and `Dtls13CheckAEADFailLimit()` sets `dtls13DoKeyUpdate = 1` (logged via
+`SendTls13KeyUpdate`) on breach. A proxy flood mode to drive it end-to-end was
+implemented and hardened (DTLS 1.3 app-record detection, flood gate, log
+capture, correct exe paths), but the runtime drive was not captured this
+session: harness orchestration was unstable (stale-proxy port holdover; wolfSSL
+batches app records into few UDP datagrams, below the per-datagram corruption
+threshold). The path is correct by construction and unit-reachable; a clean
+runtime drive is a follow-up (temporarily lower the limit and re-run
+`_ku_test.ps1`). Device-side Renode record-path benchmarking remains future
+work.
 
 ## 6. X.509 cert-mode handshake (M2.5) — VERIFIED
 

@@ -32,6 +32,18 @@ int main(int argc, char** argv)
     WOLFSSL* ssl;
     int ret;
     int shortTimeout = argc > 3 && strcmp(argv[3], "--short-timeout") == 0;
+    int msgCount = 1;
+    if (argc > 3) {
+        if (strcmp(argv[3], "--short-timeout") == 0) {
+            shortTimeout = 1;
+            if (argc > 4) msgCount = atoi(argv[4]);
+        } else {
+            msgCount = atoi(argv[3]);
+            if (argc > 4 && strcmp(argv[4], "--short-timeout") == 0)
+                shortTimeout = 1;
+        }
+    }
+    if (msgCount < 1) msgCount = 1;
 
     if (argc > 2) { host = argv[1]; port = atoi(argv[2]); }
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -83,29 +95,31 @@ int main(int argc, char** argv)
     printf("HANDSHAKE OK. cipher: %s\n",
         wolfSSL_get_cipher(ssl));
 
-    /* echo one message */
+    /* echo N messages (msgCount; default 1) */
     {
         char buf[64];
         const char* msg = "ascon-dtls test message";
-        wolfSSL_write(ssl, msg, (int)strlen(msg) + 1);
-        {
-            int tries = 0;
-            do {
-                ret = wolfSSL_read(ssl, buf, sizeof(buf));
-                if (ret <= 0) {
-                    int err = wolfSSL_get_error(ssl, ret);
-                    if ((err == WOLFSSL_ERROR_WANT_READ ||
-                         err == WOLFSSL_ERROR_WANT_WRITE) &&
-                        tries++ < (shortTimeout ? 10 : 100)) {
-                        Sleep(50);
-                        continue;
+        int i;
+        for (i = 0; i < msgCount; i++) {
+            wolfSSL_write(ssl, msg, (int)strlen(msg) + 1);
+            {
+                int tries = 0;
+                do {
+                    ret = wolfSSL_read(ssl, buf, sizeof(buf));
+                    if (ret <= 0) {
+                        int err = wolfSSL_get_error(ssl, ret);
+                        if ((err == WOLFSSL_ERROR_WANT_READ ||
+                             err == WOLFSSL_ERROR_WANT_WRITE) &&
+                            tries++ < (shortTimeout ? 10 : 100)) {
+                            Sleep(50);
+                            continue;
+                        }
                     }
-                }
-                break;
-            } while (1);
+                    break;
+                } while (1);
+            }
+            if (ret > 0) printf("echo ok [%d]: %s\n", i, buf);
         }
-        if (ret > 0) printf("echo ok: %s\n", buf);
-        else printf("echo fail, err %d\n", wolfSSL_get_error(ssl, ret));
     }
 
     wolfSSL_shutdown(ssl);

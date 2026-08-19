@@ -105,28 +105,38 @@ int main(int argc, char** argv)
     }
     printf("HANDSHAKE OK. cipher: %s\n", wolfSSL_get_cipher(ssl));
 
-    /* echo one message */
+    /* echo up to msgLoop messages; on a failed read keep looping so that
+     * repeated authentication failures (e.g. a flood of corrupted records)
+     * accumulate and trip the forced-KeyUpdate path. */
     {
         char buf[64];
-        int tries = 0;
-        do {
-            ret = wolfSSL_read(ssl, buf, sizeof(buf));
-            if (ret <= 0) {
-                int err = wolfSSL_get_error(ssl, ret);
-                if ((err == WOLFSSL_ERROR_WANT_READ ||
-                     err == WOLFSSL_ERROR_WANT_WRITE) &&
-                    tries++ < (shortTimeout ? 20 : 100)) {
-                    Sleep(50);
-                    continue;
+        int msgLoop = 20;
+        int i;
+        if (argc > 3) msgLoop = atoi(argv[3]);
+        for (i = 0; i < msgLoop; i++) {
+            int tries = 0;
+            do {
+                ret = wolfSSL_read(ssl, buf, sizeof(buf));
+                if (ret <= 0) {
+                    int err = wolfSSL_get_error(ssl, ret);
+                    if ((err == WOLFSSL_ERROR_WANT_READ ||
+                          err == WOLFSSL_ERROR_WANT_WRITE) &&
+                         tries++ < (shortTimeout ? 20 : 100)) {
+                        Sleep(50);
+                        continue;
+                    }
                 }
+                break;
+            } while (1);
+            if (ret > 0) {
+                printf("got: %s\n", buf);
+                wolfSSL_write(ssl, buf, ret);
             }
-            break;
-        } while (1);
-        if (ret > 0) {
-            printf("got: %s\n", buf);
-            wolfSSL_write(ssl, buf, ret);
+            else {
+                int err = wolfSSL_get_error(ssl, ret);
+                printf("read fail [%d], err %d\n", i, err);
+            }
         }
-        else printf("read fail, err %d\n", wolfSSL_get_error(ssl, ret));
     }
 
     wolfSSL_shutdown(ssl);
