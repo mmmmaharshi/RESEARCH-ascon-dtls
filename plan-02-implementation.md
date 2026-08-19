@@ -38,10 +38,10 @@
 2. Usage-limit accounting: count records protected + records failing authentication per key; KeyUpdate trigger (configurable cap for tests, MUST-bound 2^48-1 per RFC 9846 §4.7.3)
 3. Negative tests: wrong key, tampered ciphertext, tampered wire seq
 
-**M2.4 Test harness green (1 wk)**
-1. Lossy/reordering proxy between endpoints; retransmission; replay within/outside window
-2. KeyUpdate mid-connection
-3. Generate own record-layer test vectors (known key/seq → ciphertext + mask) — appendix material for the paper; none exist publicly
+**M2.4 Test harness green — CLOSED (validation §5)**
+1. Lossy/reordering proxy between endpoints; retransmission; replay within/outside window — **VERIFIED** across observe/tamper/replay/truncate/sequence/epoch (see dtls13-ascon-validation.md §5)
+2. KeyUpdate mid-connection — *follow-up*: forced-KeyUpdate path (`Dtls13CheckAEADFailLimit` 2^15 → `dtls13DoKeyUpdate`) implemented + unit-reachable but not driven by the proxy harness
+3. Generate own record-layer test vectors — *follow-up*: mask vectors produced (tools/ascon_mask_kat.c); full-record AEAD encrypt/decrypt vectors pending
 
 **M2.5 X.509 mode with Ascon-Hash256 (optional, 1-2 wks)**
 - CertificateVerify + signature schemes hash — scope creep guard: keep as stretch; PSK-only covers the paper's claims
@@ -53,7 +53,7 @@
 | M2.1 | Build green, Ascon KATs pass |
 | M2.2 | PSK-mode DTLS 1.3 handshake + data with 0x006E |
 | M2.3 | Mask + accounting working, negative tests pass |
-| M2.4 | Loss/reorder/KeyUpdate harness green; own vectors generated |
+| M2.4 | Loss/reorder negative-proxy harness green (VERIFIED §5); KeyUpdate-path + own vectors = follow-ups |
 | M2.5 | (optional) X.509 mode |
 
 ## 4. Risks

@@ -3,8 +3,9 @@
 **Status:** validated end-to-end on Windows/desktop (loopback UDP).
 **Date:** 2026-08-14
 **Scope:** M2.1 + M2.2 verification (suite wiring, PSK handshake, handshake-hash
-binding to Ascon-Hash256) and M2.4 partial (AEAD authentication under tamper,
-via `tools/dtls_negative_proxy.ps1`).
+binding to Ascon-Hash256), M2.3 (record-layer mask/nonce/usage-limits), and
+M2.4 (full negative-proxy matrix — observe/tamper/replay/truncate/sequence/epoch —
+via `tools/dtls_negative_proxy.ps1`). See §5.
 
 ## Build recipe
 
