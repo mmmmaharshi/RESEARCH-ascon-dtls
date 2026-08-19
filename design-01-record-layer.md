@@ -55,8 +55,9 @@
 - Constraints from RFC 9147 §4.2.3: ciphertext must be >= 16 bytes for masking; senders must pad short plaintexts. Ascon-AEAD128 has a 16-byte tag, so the minimum record already meets this — no padding needed.
 - **Design requirement discovered in analysis:** the mask MUST be ciphertext-dependent. If the mask depends only on (sn_key, nonce) — e.g., a fixed per-epoch constant — the wire seq numbers form a visible arithmetic progression (consecutive seqs XOR the same mask yield consecutive wire values). An observer recovers the record count and the retransmission pattern; this defeats the privacy goal of RFC 9147 §4.2.3. The AES-ECB construction (mask = AES-ECB(sn_key, Ciphertext[0..15])) is ciphertext-dependent for exactly this reason; the Ascon design must mirror that property. (This kills the naive "mask = AEAD(sn_key, fixed nonce, zeros)" variant — its mask is a per-epoch constant.)
 
-- **Chosen: Option B — keyed-sponge PRF (ciphertext-dependent).**
-  - Construction: state S = sn_key(128) || ciphertext[0..15](128) || domsep(64), where domsep = 0x80 || 0x00...0 (sponge pad + domain constant distinct from all SP 800-232 IVs); apply Ascon-P^12; mask = low 16 bits of the first rate word (S0' after P).
+  - **Chosen: Option B — keyed-sponge PRF (ciphertext-dependent).**
+   - Construction: state S = sn_key(128) || ciphertext[0..15](128) || domsep(64), where domsep = 0x80 || 0x00...0 (sponge pad + domain constant distinct from all SP 800-232 IVs); apply Ascon-P^12; mask = low 16 bits of the first rate word (S0' after P).
+   - **Implementation (verified in the wolfSSL fork):** `wc_AsconAEAD128_Mask()` (`wolfcrypt/src/ascon.c:543`) builds `S = domsep(64) || sn_key(128) || ciphertext[0..15](128)` (rate r=128 = ciphertext, capacity c=192 = domsep||key), runs `Ascon-P^12`, and returns `S0' || S1'` (16 bytes; the record layer consumes 8 or 16 bits per RFC 9147 §4.2.3). `domsep` is the ASCII constant `"RNDIMSK_"` (`ASCON_MASK_DOMSEP = 0x524e44494d534b5f`, `wolfcrypt/ascon.h:47`) — a stronger domain separator than the `0x80||0…0` placeholder above, explicitly distinct from the Ascon-AEAD128 IV and Ascon-Hash256 IV. Test vectors: `dtls13-ascon-validation.md` §4.2.1.
   - Security: keyed-sponge PRF in sn_key. r=128, c=192 → PRF bound ~ q^2/2^c + q/2^k, i.e. advantage negligible up to q ≈ 2^96 calls — far beyond the 2^48 wire-seq limit. [TO FILL] exact theorem citation (keyed-sponge PRF) in Phase 1.
   - Cost: one Ascon-P^12 per record ≈ 40% of one Ascon-AEAD128 encryption (P^12+P^6+P^12). Option A would add a full second AEAD call — ~2.5x this cost — material on small CoAP records.
   - Honesty note for the paper: this is a NEW construction on the Ascon permutation, not a mode covered by SP 800-232. The paper supplies the PRF argument itself — a deliberate, defensible contribution; this is exactly §6 formal target 2.
@@ -74,6 +75,18 @@
 | Records protected per key | 2^48 - 1 | Protocol cap (seq_num space, RFC 9147 §4.2) | privacy ≤ 2^-138 |
 | Bytes per key | 2^48 records x 2^14 = 2^62 | Protocol cap (max record 2^14 bytes) | — |
 | Records failing authentication per key | 2^48 | Protocol cap; 128-bit tag | forgery ≤ 2^-80 |
+
+  **Implementation note (verified):** the wolfSSL fork enforces wolfSSL's
+  conservative DTLS defaults rather than the 2^48 cap:
+  `DTLS_AEAD_ASCON_FAIL_LIMIT = 2^16` (hard) and
+  `DTLS_AEAD_ASCON_FAIL_KU_LIMIT = 2^15` (key-update)
+  (`wolfssl/wolfssl/internal.h:1454-1455`, handled in
+  `Dtls13CheckAEADFailLimit()` `dtls13.c:3250-3255`). 2^16 is stricter than
+  2^48; at 2^16 failed attempts the cumulative forgery advantage is
+  2^16 / 2^128 = 2^-112, far below the 2^-60 rule of thumb. The 2^48 protocol
+  cap remains the theoretical maximum. The choice between the implemented 2^16
+  and the design's literal 2^48 is a paper-claims decision, not a correctness
+  one (see `dtls13-ascon-validation.md` §4.3).
 
 Derivation:
 - Confidentiality: Ascon-128 has r=64, c=256. PRF-indistinguishability advantage ~ q_b^2/2^256 + q/2^128 (q_b = rate blocks). At protocol max (2^62 bytes ~ 2^59 blocks): 2^118/2^256 = 2^-138. Not binding.
