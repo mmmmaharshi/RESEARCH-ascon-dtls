@@ -31,19 +31,25 @@ int main(int argc, char** argv)
     WOLFSSL_CTX* ctx;
     WOLFSSL* ssl;
     int ret;
-    int shortTimeout = argc > 3 && strcmp(argv[3], "--short-timeout") == 0;
+    int shortTimeout = 0;
     int msgCount = 1;
-    if (argc > 3) {
-        if (strcmp(argv[3], "--short-timeout") == 0) {
+    int msgSize = 32;
+    int k;
+    for (k = 3; k < argc; k++) {
+        if (strcmp(argv[k], "--short-timeout") == 0) {
             shortTimeout = 1;
-            if (argc > 4) msgCount = atoi(argv[4]);
+        } else if (strcmp(argv[k], "--size") == 0 && k + 1 < argc) {
+            msgSize = atoi(argv[++k]);
+        } else if (strcmp(argv[k], "--msgs") == 0 && k + 1 < argc) {
+            msgCount = atoi(argv[++k]);
         } else {
-            msgCount = atoi(argv[3]);
-            if (argc > 4 && strcmp(argv[4], "--short-timeout") == 0)
-                shortTimeout = 1;
+            /* legacy positional: bare number is the message count */
+            msgCount = atoi(argv[k]);
         }
     }
     if (msgCount < 1) msgCount = 1;
+    if (msgSize < 1) msgSize = 1;
+    if (msgSize > 1080) msgSize = 1080;
 
     if (argc > 2) { host = argv[1]; port = atoi(argv[2]); }
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -95,13 +101,19 @@ int main(int argc, char** argv)
     printf("HANDSHAKE OK. cipher: %s\n",
         wolfSSL_get_cipher(ssl));
 
-    /* echo N messages (msgCount; default 1) */
+    /* echo N messages (msgCount), each msgSize bytes, with a short gap so each
+     * application record is sent in its own datagram (deterministic positions
+     * for the negative-proxy matrix). */
     {
-        char buf[64];
-        const char* msg = "ascon-dtls test message";
-        int i;
+        char buf[1100];
+        int i, j;
         for (i = 0; i < msgCount; i++) {
-            wolfSSL_write(ssl, msg, (int)strlen(msg) + 1);
+            char* payload = (char*)malloc((size_t)msgSize + 1);
+            for (j = 0; j < msgSize; j++)
+                payload[j] = (char)('A' + (j % 26));
+            payload[msgSize] = 0;
+            wolfSSL_write(ssl, payload, msgSize);
+            Sleep(20);
             {
                 int tries = 0;
                 do {
@@ -118,7 +130,8 @@ int main(int argc, char** argv)
                     break;
                 } while (1);
             }
-            if (ret > 0) printf("echo ok [%d]: %s\n", i, buf);
+            if (ret > 0) printf("echo ok [%d]: %.*s\n", i, ret, buf);
+            free(payload);
         }
     }
 

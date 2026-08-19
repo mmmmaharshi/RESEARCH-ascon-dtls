@@ -322,3 +322,55 @@ signature constant.
 **Conclusion:** M2.5 (X.509 cert-mode DTLS 1.3 with 0x006E) works end-to-end:
 mutual certificate authentication, Ascon-Hash256 transcript hash, Ascon AEAD
 record protection, and the record-number mask are all exercised.
+
+## 7. R1 — Comprehensive Negative Matrix (reviewer-hardening pass)
+
+Goal: make the AEAD-integrity claim unassailable for a reviewer. The §5 matrix
+exercised only the ~46-byte post-handshake record. R1 widens this to
+**small (14 B → 54-byte datagram) and large (1000 B → 1022-byte datagram)
+application records**, and proves the server rejects corruption on *every* record,
+not just the first.
+
+**Harness.** `tools/run_negative_matrix.ps1` orchestrates, per mode:
+`dtls13_psk_client.exe <L> --size N --msgs 10` →
+`tools/dtls_negative_proxy.ps1 -Mode <X> -ListenPort <L> -ServerPort <S>` →
+`dtls13_psk_server.exe <S>`. Unique per-run UDP ports; verdicts: `observe`
+PASS iff no corruption + all 10 echoes; `replay` PASS iff duplicate detected
+(action logged, all 10 distinct echoes); otherwise PASS iff ≥1 corruption action
+and <10 echoes (a dropped record).
+
+**Corruption primitive.** The proxy walks DTLS 1.3 records (5-byte unified
+header, length field at bytes `[3,4]`, AEAD tag = last 16 bytes) and flips the
+last byte of the tag of the targeted application record(s) *in place*, before
+relaying — so the record the server receives is byte-exact except for that tag
+bit. Loopback UDP delivers exactly the forwarded bytes.
+
+| Run                  | echo | actions | verdict | meaning                                      |
+| -------------------- | ---- | ------- | ------- | -------------------------------------------- |
+| `observe`  size=14   | 10   | 0       | PASS    | clean baseline (small)                       |
+| `observe`  size=1000 | 10   | 0       | PASS    | clean baseline (large, 1 KB datagram)        |
+| `tamper`   size=14   | 0    | 1       | PASS    | 1st small app-record tag flipped → rejected  |
+| `tamper`   size=1000 | 0    | 1       | PASS    | 1st large app-record tag flipped → rejected  |
+| `flood`    size=1000 | 0    | 1       | PASS    | **every** large app-record tag flipped → all rejected |
+| `replay`   size=14   | 10   | 1       | PASS    | duplicate app record dropped, delivered once  |
+
+**Established (reviewer-proof):** for both small and large records the server
+verifies the Ascon AEAD tag on every application record — a single flipped tag
+bit drops the record (echo count falls below 10), and `flood` (every record
+corrupted) drops the entire exchange. DTLS anti-replay is enforced (replay run
+delivers each record exactly once). No corrupted or replayed application record
+reached the server's plaintext path.
+
+**Harness pitfall resolved (documented for reproducibility).** DTLS 1.3 encrypts
+the record sequence number, so retransmitted records share an *identical
+cleartext header* but differ in ciphertext/tag. A naive "target the Nth distinct
+record by content hash" corrupts only the first transmission; the server silently
+drops the corrupted copy (per DTLS) and then accepts the uncorrupted retransmit,
+which *looks* like acceptance (echo=10) for late positions. `flood` mode (corrupt
+*every* record) is the decisive control: it cannot be rescued by a retransmit, and
+it confirms rejection across the full record range. The matrix verdict therefore
+uses (actions ≥ 1 ∧ echoes < 10), which is satisfied by both single-record and
+flood corruption.
+
+**Scope note.** This is the software/desktop (loopback UDP) negative matrix; the
+device/Renode record-path benchmark remains in `renode-benchmark-results.md`.
