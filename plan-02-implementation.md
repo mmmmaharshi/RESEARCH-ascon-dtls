@@ -46,7 +46,7 @@
 **M2.5 X.509 mode with Ascon-Hash256 — DONE (validation §6)**
 - Mutual RSA-PSS cert auth over DTLS 1.3 0x006E; CertificateVerify signs over the
   Ascon-Hash256 transcript; only residual SHA-256 is the RSA-PSS *scheme* hash
-  (by-design, RFC 8446 §4.2.3). PSK path still the primary paper claim.
+  (by-design, RFC 9846 §4.2.3, obsoletes RFC 8446). PSK path still the primary paper claim.
 
 ## 3. Milestones
 

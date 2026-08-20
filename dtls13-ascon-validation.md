@@ -318,7 +318,7 @@ Debug confirms:
 **SHA-256 residual (by design, not a violation):** the `Sha256` lines in the
 debug are (a) wolfSSL's diagnostic forensic dump of every hash, and (b) the
 **RSA-PSS signature *scheme* hash** — TLS 1.3 fixes the signature-algorithm
-hash independently of the handshake transcript hash (RFC 8446 §4.2.3). The
+hash independently of the handshake transcript hash (RFC 9846 §4.2.3, obsoletes RFC 8446). The
 handshake *transcript* hash that drives CertificateVerify, Finished, and all
 key schedule steps is Ascon-Hash256. This matches `design-01-record-layer.md`
 Q1 ("no SHA-256 in the handshake hash") — the only SHA-256 is the per-scheme
@@ -628,7 +628,7 @@ on the client side:
   new-style `SSL_CTX_set_psk_use_session_callback` + `SSL_CIPHER_find()`
   session. (The legacy `-psk` callback path hardcodes cipher 0x1301
   `TLS_AES_128_GCM_SHA256`, which forces a SHA-256 binder and fails the
-  server's binder check — RFC 8446 §4.2.11 default-hash rule. The suite is
+  server's binder check — RFC 9846 §4.2.11 (obsoletes RFC 8446) default-hash rule. The suite is
   registered as `SSL_NOT_DEFAULT`, so `openssl ciphers -s -tls1_3` does not
   list it; it is enabled explicitly via `SSL_CTX_set_ciphersuites`.)
 
