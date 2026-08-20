@@ -170,35 +170,68 @@ collision exponent is `c = 192` vs the RFC's `n = 128`.
 
 ## 7. Mechanization status & plan (honest)
 
-The proof above is a **hand proof**. To convert "we asserted the bound" into "we proved the
-bound," machine-checking is planned in **EasyCrypt** (preferred — mature keyed-sponge
-libraries) or **CryptoVerif**:
+The proof above is a **hand proof**. This section records what is machine-checked and what is
+not, and how to re-run the check.
 
-- **Model:** Ascon-P as an ideal permutation oracle (`perm`/`aperm`); encode oracle
-  `Mask_K(ct) = trunc(P(domsep‖K‖ct))`.
-- **Lemma `mask_prf`:** `indistinguishable (Real K) (Ideal K)` with bound
-  `q²/2^192 + q/2^128` (plus permutation advantage) — modulo Thm 1′ tightening.
-- **Lemma `rfc_mask_prf`:** same for `AES_K(ct)` with bound `q²/2^128`.
-- **Lemma `dominance`:** for every `q`, `bound(mask) < bound(rfc_mask)` — establishes Thm 3.
-- **PQ variant:** EasyCrypt `pqeuclidean`/QROM for Thm 2.
+### 7.1 Machine-checked (Coq / Rocq 9.1.1)
 
-**Status:** the toolchain install was *attempted and blocked by the environment* — it is not
-merely slow, so polling cannot complete it. In WSL (Ubuntu 24.04, 4 cores, 3.2 GB RAM) we
-installed `opam` and built OCaml 5.1.0 + 4.14.1, but:
-- **EasyCrypt** lives in a GitHub repository; `git` egress to `github.com` is blocked in this
-  sandbox (HTTPS `curl` reaches GitHub, but `git ls-remote`/`git clone` hang — an egress/TLS
-  filter on the git transport), so `opam repo add easycrypt` (and thus `opam install easycrypt`)
-  cannot fetch the package (`No package named easycrypt found`).
+The **integer combinatorial core** of the bound is now machine-verified in
+`tools/coq/mask_prf.v` (no `Admitted`; all goals closed, `coqc` returns exit 0):
+
+- `count_coll_ub q U : 2 * count_coll q U <= q * (q - 1) * U ^ (q - 1)`.
+  This is the birthday collision bound in its exact integer form — the combinatorial
+  statement behind Theorem 2 (`coll_prob ≤ q(q−1)/2·U`), established by induction on `q`
+  using the recurrence `count_coll (S q) U = count_coll q U · U + falling U q · q` and the
+  bound `falling U q ≤ U^q`.
+- `mask_prf_bound q c Hreducible :
+   2 * (2^c)^q * mask_advantage q (2^c) ≤ q * (q−1) * (2^c)^(q−1)`.
+  Chains the reduction assumption `Hreducible` (below) with `count_coll_ub` to yield the
+  integer form `adv ≤ q(q−1) / (2 · 2^c)` with `U = 2^c` (c = 192 for Ascon-128a).
+
+Re-run:
+
+```
+wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/tools/coq && coqc mask_prf.v'
+```
+
+The Coq install (`opam install coq`, Rocq 9.1.1, OCaml 5.1.0) is reachable in WSL even though
+the EasyCrypt/CryptoVerif fetches are not (see §7.2). The model is the **ideal permutation**:
+`count_coll q U` counts collision pairs over a uniform universe of `U` capacity-states, which
+is exactly the `coll_prob` term in Theorem 2.
+
+### 7.2 Not machine-checked (hand arguments / assumptions)
+
+Three steps remain asserted by hand and are flagged as assumptions in the Coq statement:
+
+1. **The keyed-sponge reduction** `Hreducible : ∀ q U, U^q · adv ≤ count_coll q U`.
+   This is the standard ideal-permutation modeling fact (the mask advantage is at most the
+   collision probability) from §4.2.1; it is the analytic core of the keyed-sponge bound and
+   is *assumed*, not proven, in `mask_prf_bound`. Closing it would require a keyed-sponge
+   security game-hop — the original EasyCrypt/CryptoVerif plan (below).
+2. **The tight `q²/2^c + q/2^k` specialization (Theorem 1′).** The verified `mask_prf_bound`
+   is the conservative `q(q−1)/(2·2^c)` form; the tighter `q²/2^192 + q/2^128` requires the
+   refined analysis and remains a hand argument.
+3. **The RSA/ECC dominance (Theorem 3) and PQ/QROM variant (Theorem 2).** Not mechanized.
+
+### 7.3 Original toolchain plan (blocked, retained for completeness)
+
+Machine-checking with **EasyCrypt** (preferred — mature keyed-sponge libraries) or
+**CryptoVerif** was attempted and blocked by the environment (not merely slow):
+- **EasyCrypt** lives in a GitHub repo; `git` egress to `github.com` is blocked in this
+  sandbox (HTTPS `curl` reaches GitHub, but `git ls-remote`/`git clone` hang), so
+  `opam repo add easycrypt` cannot fetch the package.
 - **CryptoVerif** is distributed only as a versioned source tarball (all versioned URLs 404)
-  or a GitLab archive that redirects to a login wall, so it is likewise unreachable here.
+  or a GitLab archive behind a login wall, likewise unreachable here.
 
-The machine-checked closure is therefore **out of reach in this environment**. What we have
-is: (1) the hand proof in §3–§6 (the contribution as submitted), and (2) a runnable EasyCrypt
-scaffold at `tools/easycrypt/mask_prf.ec` (modules `Mask`, oracles, and the four lemmas
-`mask_prf_conservative` / `mask_prf_tight` / `mask_prf_pq` / `mask_dominates_rfc`, each with
-the admitted game-hop plan from §3–§6). The scaffold is meant to compile against a standard
-EasyCrypt install elsewhere; closing the `admit`ted hops is a defined follow-up that requires
-toolchain access this sandbox does not provide. *We do not claim the bound is machine-verified.*
+A runnable EasyCrypt scaffold remains at `tools/easycrypt/mask_prf.ec` (modules `Mask`,
+oracles, and the four lemmas `mask_prf_conservative` / `mask_prf_tight` / `mask_prf_pq` /
+`mask_dominates_rfc`, each with the `admit`ted game-hop plan from §3–§6). It is meant to
+compile against a standard EasyCrypt install elsewhere; closing the hops is a defined
+follow-up that requires toolchain access this sandbox does not provide.
+
+*Summary claim:* the **integer birthday bound** (Theorem 2's combinatorial core) is
+**machine-verified** in Coq. The keyed-sponge reduction (1) and the tight/PQ/dominance
+specializations are **hand arguments** and are not claimed machine-verified.
 
 ---
 
