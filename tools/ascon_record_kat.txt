@@ -1,0 +1,19 @@
+  A seq=0  aad=min  pt=14B:
+    key      = 000102030405060708090a0b0c0d0e0f
+    iv       = 101112131415161718191a1b1c1d1e1f
+    seq      = 0
+    nonce    = 101112131415161718191a1b1c1d1e1f
+    aad      = 17fefd00000000000000000000
+    pt       = 6173636f6e2d64746c73206d7367
+    ct       = 8e83f5a25547b495967fe5cf6edc
+    tag      = bc14a3af8b1d92a79a4d722d6cf6bfe7
+  B seq=1  aad=full pt=32B:
+    key      = 000102030405060708090a0b0c0d0e0f
+    iv       = 101112131415161718191a1b1c1d1e1f
+    seq      = 1
+    nonce    = 101112131415161718191a1b1c1d1e1e
+    aad      = 17fefd0001123456789abcdef0
+    pt       = 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+    ct       = ec55fa4c5b6e246dbab0e3b3c989cd8b0946434b27aedf80717f42caa5a471ce
+    tag      = 906a0021bb26b2da2689c2de2c8474a8
+KAT OK
