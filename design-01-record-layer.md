@@ -48,6 +48,8 @@
 
   On KeyUpdate: `traffic_secret_{N+1} = HKDF-Expand-Label(traffic_secret_N, "traffic upd", "", 32)` (line 39), then all three keys re-derive. `sn_key` is therefore the **exact** key the mask PRF is keyed with, and it is co-derived with the AEAD key from the same traffic secret. The wolfSSL fork materialises it at `dtls13.c:2177/2188` (`ssl->keys.client/server_sn_key`), matching this derivation (see `dtls13-ascon-validation.md` §4.2.1).
 
+  - **PSK parameters (evaluated mode).** The ciphersuite is exercised with an **external PSK** (RFC 9147 §5.1 / RFC 8446 §5.1), provisioned out-of-band as a static shared secret — *not* a resumption PSK. **Primary key-exchange mode: `psk_ke`** (pure PSK, no (EC)DHE), matching the wolfSSL-fork interop (`dtls13-ascon-validation.md` §11.0/§11.1). **`psk_dhe_ke`** (PSK + ephemeral DHE) is also interoperated (OpenSSL 3.6.3 client, custom group 0x0100). **PSK key length: 256 bits (32 bytes)** — the value in `openssl-ascon/README` (64 hex digits). **Identity: `Client_identity`** (fixed test identity). The PSK binder is computed over **HMAC-Ascon-Hash256**: `early_secret = HKDF-Extract(0, psk)`, and `client/server_traffic_secret_N` derives through the standard RFC 8446 §7.1 chain (below), so the §4.1 key schedule above is fed by an external-PSK-derived secret.
+
 ### 4.2 Nonce mapping — RESOLVED (RFC 9147 §4, §4.2.1)
 
 - RFC 9147 states: "the 64-bit sequence_number is used as the sequence number for the AEAD computation; unlike DTLS 1.2, the epoch is not included."
@@ -129,7 +131,7 @@ Derivation:
 
 ## 7. Open questions (Phase 1 status)
 
-1. **Q1 — resolved (by design):** In TLS 1.3 the ciphersuite's hash is used for the transcript, HKDF, and Finished. 0x006E therefore runs the ENTIRE handshake on Ascon-Hash256 (RFC 8446 §7.1). Consequence: the paper must cover handshake-side hashing (Finished, CertificateVerify, PSK binder), not only record protection. [TO FILL] Verify exact secret-derivation mapping against RFC 8446 §7.1 and the HKDF-Expand-Label labels.
+1. **Q1 — resolved (by design):** In TLS 1.3 the ciphersuite's hash is used for the transcript, HKDF, and Finished. 0x006E therefore runs the ENTIRE handshake on Ascon-Hash256 (RFC 8446 §7.1). Consequence: the paper must cover handshake-side hashing (Finished, CertificateVerify, PSK binder), not only record protection. Secret-derivation mapping (RFC 8446 §7.1, Hash = Ascon-Hash256): external PSK → `early_secret = HKDF-Extract(0, psk)`; `binder_key = HKDF-Expand-Label(early_secret, "res binder", "", 32)` for the PSK binder; for `psk_ke` (no (EC)DHE) `client/server_traffic_secret_0 = Derive-Secret(early_secret, "c ap traffic"/"s ap traffic", "")` directly (no handshake-secret DHE step); `traffic_secret_{N+1}` via the `"traffic upd"` label per §4.3. These feed the §4.1 key schedule (labels `"key"`/`"iv"`/`"sn"`). Verified against RFC 8446 §7.1.
 2. **Q2 — resolved:** Zero-padded nonce, no epoch bits. See §4.2.
 3. **Q3 — resolved (format):** Follow RFC 9147 §4.5.3: two limits (records protected per key, records failing authentication per key), in the RFC 9001 §A.5 table style. See §4.3.
 4. **Q4 — open:** Benchmark target. Candidates: RP2040 (Cortex-M0+) and ESP32-C3 (RV32IMC) — both cheap off-the-shelf. Decide in Phase 4.

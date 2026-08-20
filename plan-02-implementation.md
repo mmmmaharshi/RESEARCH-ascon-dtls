@@ -30,7 +30,7 @@
 1. Add suite ID 0x006E to wolfSSL ciphersuite table
 2. Map AEAD → wc_AsconAEAD128; handshake hash → Ascon-Hash256 (transcript, HKDF, Finished, exporters, binders)
 3. Grep tls13.c for SHA-256 hardcoding; parameterize the handshake hash
-4. Start with PSK-only mode (RFC 9147 supports TLS 1.3 PSK): no certificates → the handshake hash is Ascon-Hash256, but the DTLS transport cookie still uses SHA-256 per RFC 6347 (so "no SHA-256 anywhere" is false — restate as "no SHA-256 in the handshake transcript hash or record AEAD")
+4. Start with **external PSK mode `psk_ke`** (RFC 9147 §5.1, pure PSK, no DHE), 256-bit key, identity `Client_identity`; `psk_dhe_ke` also supported for interop: no certificates → the handshake hash is Ascon-Hash256, but the DTLS transport cookie still uses SHA-256 per RFC 6347 (so "no SHA-256 anywhere" is false — restate as "no SHA-256 in the handshake transcript hash or record AEAD")
 5. Handshake + application data over DTLS 1.3, both directions
 
 **M2.3 Mask + usage accounting (1 wk)**

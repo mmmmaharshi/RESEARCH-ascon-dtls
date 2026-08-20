@@ -621,7 +621,7 @@ Second independent-stack confirmation of suite 0x006E, this time with OpenSSL
 on the client side:
 
 * **Server**: this wolfSSL fork, `tools/tls13_psk_server.c`, suite
-  `TLS13-ASCONAEAD128-ASCONHASH256` (0x006E), `psk_dhe_ke` over the fork's
+  `TLS13-ASCONAEAD128-ASCONHASH256` (0x006E), `psk_dhe_ke` (OpenSSL-interop mode; the fork's primary eval uses `psk_ke` with picotls — §11.0) over the fork's
   custom 256-byte-key group 0x0100, identity `Client_identity`.
 * **Client**: patched OpenSSL 3.6.3 (`openssl-ascon/ascon_psk_client.c`),
   suite `TLS_ASCON_AEAD128_ASCON_HASH256`, PSK provisioned through the

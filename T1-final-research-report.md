@@ -347,7 +347,7 @@ the timer covered only the client process, with output redirected to files.
 | PSK | 317 ms | 230--470 ms | 5/5 passed |
 | X.509 with peer checks | 708 ms | 591--884 ms | 5/5 passed |
 
-The PSK test used `dtls13_psk_server.exe` and `dtls13_psk_client.exe`. The
+The PSK test used `dtls13_psk_server.exe` and `dtls13_psk_client.exe` — an **external PSK** (RFC 9147 §5.1), **`psk_ke`** primary mode (256-bit / 32-byte key, identity `Client_identity`); `psk_dhe_ke` also interoperated with OpenSSL (§`dtls13-ascon-validation.md` §11.1). The
 X.509 test used the example server and client with the corrected trust stores
 listed below. All runs selected
 `TLS_ASCONAEAD128_ASCONHASH256` and completed the encrypted application
