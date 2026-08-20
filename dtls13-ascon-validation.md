@@ -156,7 +156,7 @@ mask = S.s64[0] || S.s64[1] // 16 bytes; 8/16 bits consumed per RFC 9147
 `domsep = 0x80 || 0x00…0`. The implementation uses the ASCII constant
 `"RNDIMSK_"` (`ASCON_MASK_DOMSEP = 0x524e44494d534b5f`,
 `wolfssl/wolfcrypt/ascon.h:47`), explicitly distinct from the Ascon-AEAD128 IV
-(`0x80400c0600000000`) and Ascon-Hash256 IV. This is a stronger, still-valid
+(`0x00001000808C0001`) and Ascon-Hash256 IV. This is a stronger, still-valid
 domain separator; `design-01-record-layer.md` §4.2.1 should be updated to match.
 
 ### 4.2.1 Mask test vectors (self-checking)
