@@ -1,12 +1,13 @@
 param(
-    [ValidateSet('observe','tamper','replay','truncate','sequence','epoch','flood')]
+    [ValidateSet('observe','tamper','replay','truncate','sequence','epoch','flood','loss')]
     [string]$Mode = 'observe',
     [int]$ListenPort = 12000,
     [int]$ServerPort = 11111,
     [int]$DurationSeconds = 15,
     [int]$CorruptIndex = 1,
     [int]$MinLen = 1,
-    [int]$MaxLen = 2000
+    [int]$MaxLen = 2000,
+    [double]$LossRate = 0.05
 )
 
 function Corrupt-Tags($arr) {
@@ -28,6 +29,7 @@ function Corrupt-Tags($arr) {
 
 $ErrorActionPreference = 'Stop'
 New-Item -ItemType Directory -Force -Path "$env:TEMP\ascon-dtls-work" | Out-Null
+$udp = New-Object System.Net.Sockets.UdpClient($ListenPort)
 $udp.Client.ReceiveBufferSize = 1MB
 $udp.Client.SendBufferSize = 1MB
 $udp.Client.ReceiveTimeout = 200
@@ -149,14 +151,23 @@ try {
             }
         }
 
-        if ($Mode -eq 'observe') {
-            $hex = (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
-            "c2s,$clientPackets,$($bytes.Length),$hex"
+        # R10 sustained-loss mode: drop client->server datagrams at LossRate
+        # (both directions so the link behaves like a real lossy channel;
+        # DTLS retransmission must still recover the full exchange).
+        $lossDrop = ($Mode -eq 'loss' -and ((Get-Random -Minimum 0 -Maximum 10000) / 10000) -lt $LossRate)
+        if ($lossDrop) {
+            "c2s-drop,clientPkt=$clientPackets,len=$($bytes.Length)"
         }
-        if (-not $alreadyForwarded) {
-            "fwd,to=$($server.Address):$($server.Port),len=$($out.Length),c2s=$clientPackets"
-            try { $n = $udp.Send($out, $out.Length, $server); "fwd-ok,n=$n" }
-            catch { "fwd-ERR:$_" }
+        else {
+            if ($Mode -eq 'observe') {
+                $hex = (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
+                "c2s,$clientPackets,$($bytes.Length),$hex"
+            }
+            if (-not $alreadyForwarded) {
+                "fwd,to=$($server.Address):$($server.Port),len=$($out.Length),c2s=$clientPackets"
+                try { $n = $udp.Send($out, $out.Length, $server); "fwd-ok,n=$n" }
+                catch { "fwd-ERR:$_" }
+            }
         }
     }
 }

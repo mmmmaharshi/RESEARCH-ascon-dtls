@@ -171,15 +171,38 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
 
 ## Loss and reorder result
 
-A local UDP proxy tested two cases:
+A local UDP proxy tested the loss and reorder paths:
 
 1. The proxy dropped the first client datagram. DTLS retransmission completed
    the handshake and the encrypted echo passed.
 2. The proxy held the first two client datagrams and sent the second first.
    DTLS processing completed and the encrypted echo passed.
 
+### Sustained uniform packet loss (R10)
+
+Beyond the single-event test above, a sustained-loss mode was added to the
+proxy (`tools\dtls_negative_proxy.ps1 -Mode loss -LossRate R`) that drops each
+*client→server* datagram independently with probability R, exercised end-to-end
+through `tools\run_loss_matrix.ps1`. This mirrors the single-event case (which
+dropped a client datagram) and isolates DTLS's handshake/app retransmission.
+Over the 18-run matrix (rates 1% / 5% / 10%, payloads 14 B and 1000 B, 3 reps
+each, 10 application messages per run):
+
+- 1% loss: 6/6 runs recovered and delivered all 10 messages.
+- 5% loss: 6/6 runs recovered and delivered all 10 messages.
+- 10% loss: 1/6 runs fully recovered; the other 5 delivered 0–9 of 10 messages.
+
+At 1% and 5% the handshake retransmits and no critical application record is
+lost within the 10-message window, so recovery is complete. At 10% a dropped
+*application-data* record desynchronises the epoch: DTLS 1.3 leaves application-
+data reliability to the application (the record layer retransmits only the
+handshake), so wolfSSL does not re-send a lost app record and the association
+stalls. This is a documented, quantitative reliability boundary rather than a
+cryptographic failure, and it matches RFC 9147's separation of handshake and
+application-data reliability.
+
 These tests do not replace a large statistical network test. They verify the
-main loss and reorder paths.
+main loss and reorder paths and quantify sustained-loss recovery.
 
 ## Negative security tests
 
