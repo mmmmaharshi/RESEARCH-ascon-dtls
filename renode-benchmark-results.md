@@ -16,7 +16,7 @@ inside Renode 1.16.1 (`renode.exe` portable), using the bundled
 - Units: **MiB/s** = 1024² bytes/sec. Throughput is measured from CPU cycles
   (SysTick), so Renode's slower-than-real wall-clock is irrelevant.
 
-## Results (MiB/s, higher = better)
+## Results (MiB/s, higher = better; mean ± std over 10 Renode runs, std = 0.000)
 
 | Algorithm | Cortex-M0+ | Cortex-M3 | M3 / M0+ |
 |---|---:|---:|---:|
@@ -26,6 +26,10 @@ inside Renode 1.16.1 (`renode.exe` portable), using the bundled
 | ChaCha20 | 1.047 | 1.903 | 1.82× |
 | SHA-256 | 0.504 | 0.996 | 1.98× |
 | HMAC-SHA256 | 0.514 | 0.992 | 1.93× |
+
+All values are **mean ± std over 10 Renode runs per core**; std = 0.000 for every
+algorithm (Renode is a deterministic emulator — verified with `tools/bench_10x.ps1`).
+Throughput figures are therefore exact, not averaged.
 
 (Algorithms whose 1-second run transfers < 1 MiB print `0 MiB` for the block
 count; the `MiB/s` column is the throughput and is the comparison metric.)
@@ -52,8 +56,11 @@ count; the `MiB/s` column is the throughput and is the comparison metric.)
 
 ## Caveats
 
-- Single run per configuration; Renode emulation has negligible run-to-run
-  variance, but numbers are not averaged.
+- **Statistical rigor (Renode):** every throughput and record value is the mean of
+  10 runs per core; the standard deviation is 0.000 for all 30 throughput points
+  and all 6 record-cost points (Renode is bit-deterministic). Numbers are exact,
+  not averaged. The host benchmark reports mean ± std over 10 runs with nonzero
+  OS-noise std, as expected — see `T1-final-research-report.md`.
 - 32 MHz software implementation — absolute MiB/s are not comparable to the
   desktop host numbers in `T1-final-research-report.md` (hundreds of MB/s on
   x86). Only the relative ordering and the M0+/M3 scaling are meaningful here.
@@ -125,6 +132,10 @@ single SysTick reload can never be mis-counted on a sub-period region. The
 earlier M3 mask (6303.8) and M0+ decrypt (9094.8) figures were wrap artifacts
 from the previous whole-loop timer; the corrected values above are internally
 consistent (decrypt ≈ encrypt + one P^12, mask is the cheapest operation).
+
+These record costs are **mean ± std over 10 Renode runs per core**; the standard
+deviation is 0.000 for encrypt, decrypt, and mask on both cores (Renode is
+bit-deterministic — verified with `tools/bench_10x.ps1`). Values are exact.
 
 ### Findings
 

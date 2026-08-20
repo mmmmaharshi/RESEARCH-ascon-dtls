@@ -123,3 +123,7 @@ Ratios (smaller is better for footprint):
   builds.
 - `aes.o` includes AES-GCM and AES-CCM code paths; a build limited to GCM only
   could be marginally smaller, but it would still dwarf Ascon.
+- **No variance reported for code-size figures:** `arm-none-eabi-size` output is
+  deterministic — the size harness (`tools/renode/size_primitives.ps1`) yields
+  byte-identical `.text` totals on every run, so there is nothing to average and
+  no std is reported (unlike the cycle benchmarks above).

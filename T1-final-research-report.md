@@ -256,8 +256,10 @@ build\wolfcrypt\benchmark\benchmark.exe -csv -chacha20-poly1305 <size> -blocks 1
 build\wolfcrypt\benchmark\benchmark.exe -csv -chacha20 <size> -blocks 10000
 ```
 
-The output reported a one-second minimum for each measurement. Each row below
-is the median of three runs. All values were re-measured on the final build,
+The output reported a one-second minimum for each measurement. Each row below is
+ the median of three runs (shape reference; the build under measurement fixes the
+ block size at 1 MiB, so a 10-run mean ± std at that block is reported in the
+ 'Host 10-run statistics' table below). All values were re-measured on the final build,
 which includes the reference AEADs (AES-GCM, ChaCha20, ChaCha20-Poly1305).
 AES-GCM is table-based software AES: `WOLFSSL_AESNI` was not defined, so no
 AES-NI acceleration was compiled in.
@@ -279,7 +281,7 @@ and above. ChaCha20 alone was fastest, but it does not provide
 authentication. AES-128-CBC does not provide authentication either and is
 only a software reference point.
 
-The hash and HMAC matrix also used three runs and median values:
+The hash and HMAC matrix also used three runs and median values (shape reference; the 'Host 10-run statistics' table below gives mean ± std over 10 runs at the 1 MiB block):
 
 | Block size | Ascon-Hash256 MB/s | HMAC-SHA256 MB/s |
 |---:|---:|---:|
@@ -287,6 +289,25 @@ The hash and HMAC matrix also used three runs and median values:
 | 256 | 115.604356 | 198.888199 |
 | 1024 | 118.991555 | 193.649362 |
 | 16384 | 119.046467 | 213.605589 |
+
+### Host 10-run statistics (mean ± std MB/s, 1 MiB block, 10 runs)
+
+| Algorithm | mean MB/s | ± std |
+|---|---:|---:|
+| ASCON-AEAD | 352.09 | 16.93 |
+| AES-128-GCM (enc) | 63.92 | 3.21 |
+| ChaCha20-Poly1305 | 388.38 | 21.10 |
+| ChaCha20 | 556.39 | 30.36 |
+| AES-128-CBC (enc) | 300.13 | 4.46 |
+| Ascon-Hash256 | 121.89 | 7.80 |
+| HMAC-SHA256 | 257.12 | 14.54 |
+
+The host benchmark runs on x86 with OS scheduling/cache noise, so std is nonzero
+(as expected); the values above are mean ± std over 10 runs. The Renode emulator
+shows std = 0.000 for every value (deterministic). Both are produced by
+`tools/bench_10x.ps1`. (The multi-block table above is a shape reference at the
+block sizes labeled; the current build fixes its block size at 1 MiB, which is
+why the 10-run column uses that block.)
 
 The Cortex-M0 compile-only result remains 2,827 bytes for the Ascon object.
 The host cycle-per-byte values must not be used as embedded cycle values.
