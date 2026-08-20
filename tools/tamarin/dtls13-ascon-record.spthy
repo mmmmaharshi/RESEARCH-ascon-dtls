@@ -1,0 +1,92 @@
+/* DTLS 1.3 Ascon record layer -- Tamarin symbolic model
+   Suite 0x006E (TLS_AEAD_WITH_ASCON_128) / DTLS 1.3 (RFC 9147) + RFC 9846 key schedule.
+   Scope: symbolic secrecy + sequence-number privacy (the Ascon mask contribution).
+   Authentication/integrity is established by the companion game-hop proof
+   (robust-channels-game-hop.md); see design-01-record-layer.md:129.
+   Mode: PSK-only (psk_ke), external PSK, per-direction keys.
+
+   Modelling notes (Tamarin 1.12.0, WSL Ubuntu 24.04):
+   - Pure rules do not support 'if' guards, so no MAC-check rule is modelled;
+     authenticity is covered by the game-hop, not this model.
+   - Per-direction keys are modelled as FRESH secrets established by the handshake
+     (not as keyd(secret,label)); the HKDF key-derivation chain itself is covered by
+     the KDF-soundness argument in M2-bounded-security-claim.md. This keeps the model
+     to built-ins (senc, xor) plus a single custom function hmac/2.
+   - 'let' bindings are ONE space-separated block before the premises.
+*/
+theory DTLS13AsconRecord
+begin
+
+builtins: symmetric-encryption, xor
+
+functions: hmac/2
+
+// ---- key material established by the (abstracted) handshake ----
+rule Setup:
+  [ Fr(~p), Fr(~ckc), Fr(~ivc), Fr(~snkc), Fr(~cks), Fr(~ivs), Fr(~snks) ]
+  -->
+  [ !PSK(~p),
+    !SendKeys_C(~p, ~ckc, ~ivc, ~snkc),
+    !RecvKeys_S(~p, ~ckc, ~ivc, ~snkc),
+    !SendKeys_S(~p, ~cks, ~ivs, ~snks),
+    !RecvKeys_C(~p, ~cks, ~ivs, ~snks) ]
+
+// ---- client -> server record (masked sequence number + AEAD) ----
+rule ClientSend:
+  let ct = senc(~ckc, ~data) tag = hmac(~ckc, ~data) mask = hmac(~snkc, ~aad) mseq = (~seq XOR mask) in
+  [ !SendKeys_C(~p, ~ckc, ~ivc, ~snkc), Fr(~seq), Fr(~data), Fr(~aad) ]
+  --> [ Out(< mseq, ct, tag, ~aad >), !Sent_C(~seq, ~data) ]
+
+// ---- server -> client record ----
+rule ServerSend:
+  let ct = senc(~cks, ~data) tag = hmac(~cks, ~data) mask = hmac(~snks, ~aad) mseq = (~seq XOR mask) in
+  [ !SendKeys_S(~p, ~cks, ~ivs, ~snks), Fr(~seq), Fr(~data), Fr(~aad) ]
+  --> [ Out(< mseq, ct, tag, ~aad >), !Sent_S(~seq, ~data) ]
+
+// ---- server receives a client record (observational; no MAC guard in pure rules) ----
+rule ServerRecv:
+  let mask = hmac(~snkc, aad) seq = (mseq XOR mask) data = sdec(~ckc, ct) in
+  [ !RecvKeys_S(~p, ~ckc, ~ivc, ~snkc), In(< mseq, ct, tag, aad >) ]
+  --> [ RecvC(seq, data, aad) ]
+
+// ---- client receives a server record ----
+rule ClientRecv:
+  let mask = hmac(~snks, aad) seq = (mseq XOR mask) data = sdec(~cks, ct) in
+  [ !RecvKeys_C(~p, ~cks, ~ivs, ~snks), In(< mseq, ct, tag, aad >) ]
+  --> [ RecvS(seq, data, aad) ]
+
+// ---- forced KeyUpdate (robust channels): rotate both directions ----
+rule KeyUpdate:
+  [ !SendKeys_C(~p, ~ckc, ~ivc, ~snkc), Fr(~ckc2), Fr(~ivc2), Fr(~snkc2) ]
+  --[ KeyUpdate(~p) ]->
+  [ !SendKeys_C(~p, ~ckc2, ~ivc2, ~snkc2),
+    !RecvKeys_S(~p, ~ckc2, ~ivc2, ~snkc2) ]
+
+// ============================ lemmas ============================
+
+lemma psk_secret:
+  "All p #i. !PSK(p) @ #i ==> not (Ex #j. K(p) @ #j)"
+
+lemma client_key_secrecy:
+  "All p ckc ivc snkc #i. !SendKeys_C(p, ckc, ivc, snkc) @ #i ==> not (Ex #j. K(ckc) @ #j)"
+
+lemma server_key_secrecy:
+  "All p cks ivs snks #i. !SendKeys_S(p, cks, ivs, snks) @ #i ==> not (Ex #j. K(cks) @ #j)"
+
+lemma data_secrecy_c2s:
+  "All seq data #i. !Sent_C(seq, data) @ #i ==> not (Ex #j. K(data) @ #j)"
+
+lemma data_secrecy_s2c:
+  "All seq data #i. !Sent_S(seq, data) @ #i ==> not (Ex #j. K(data) @ #j)"
+
+lemma seq_privacy_c2s:
+  "All seq data #i. !Sent_C(seq, data) @ #i ==> not (Ex #j. K(seq) @ #j)"
+
+lemma seq_privacy_s2c:
+  "All seq data #i. !Sent_S(seq, data) @ #i ==> not (Ex #j. K(seq) @ #j)"
+
+lemma keyupdate_reachable:
+  exists-trace
+  "Ex p #i. KeyUpdate(p) @ #i"
+
+end
