@@ -182,14 +182,23 @@ libraries) or **CryptoVerif**:
 - **Lemma `dominance`:** for every `q`, `bound(mask) < bound(rfc_mask)` — establishes Thm 3.
 - **PQ variant:** EasyCrypt `pqeuclidean`/QROM for Thm 2.
 
-**Status:** toolchain install *in progress* — EasyCrypt is being built from source in WSL
-(`opam install easycrypt`, which compiles Coq + Why3 + EasyCrypt; see `/tmp/ec.log`). A
-runnable scaffold theory exists at `tools/easycrypt/mask_prf.ec` (modules `Mask`, oracles,
-and the four lemmas `mask_prf_conservative` / `mask_prf_tight` / `mask_prf_pq` /
-`mask_dominates_rfc`, each with the admitted game-hop plan from §3–§6). The hand proof in
-§3–§6 is the contribution as submitted; the machine-checked closure is a defined follow-up
-(the lemmas above are exact specifications, not aspirations). *We do not yet claim the bound
-is machine-verified.*
+**Status:** the toolchain install was *attempted and blocked by the environment* — it is not
+merely slow, so polling cannot complete it. In WSL (Ubuntu 24.04, 4 cores, 3.2 GB RAM) we
+installed `opam` and built OCaml 5.1.0 + 4.14.1, but:
+- **EasyCrypt** lives in a GitHub repository; `git` egress to `github.com` is blocked in this
+  sandbox (HTTPS `curl` reaches GitHub, but `git ls-remote`/`git clone` hang — an egress/TLS
+  filter on the git transport), so `opam repo add easycrypt` (and thus `opam install easycrypt`)
+  cannot fetch the package (`No package named easycrypt found`).
+- **CryptoVerif** is distributed only as a versioned source tarball (all versioned URLs 404)
+  or a GitLab archive that redirects to a login wall, so it is likewise unreachable here.
+
+The machine-checked closure is therefore **out of reach in this environment**. What we have
+is: (1) the hand proof in §3–§6 (the contribution as submitted), and (2) a runnable EasyCrypt
+scaffold at `tools/easycrypt/mask_prf.ec` (modules `Mask`, oracles, and the four lemmas
+`mask_prf_conservative` / `mask_prf_tight` / `mask_prf_pq` / `mask_dominates_rfc`, each with
+the admitted game-hop plan from §3–§6). The scaffold is meant to compile against a standard
+EasyCrypt install elsewhere; closing the `admit`ted hops is a defined follow-up that requires
+toolchain access this sandbox does not provide. *We do not claim the bound is machine-verified.*
 
 ---
 
