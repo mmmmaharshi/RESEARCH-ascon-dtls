@@ -71,19 +71,26 @@ behind the "device-side record-path benchmarking" future-work item.
 
 | Operation | Cortex-M0+ (cyc/rec) | Cortex-M3 (cyc/rec) | M0+ cyc/byte | M3 cyc/byte |
 |---|---:|---:|---:|---:|
-| ascon-record-encrypt | 4091.5 | 2380.5 | 127.9 | 74.4 |
-| ascon-record-decrypt | 9769.7 | 8035.6 | 305.3 | 251.1 |
-| ascon-record-mask | 1299.8 | 809.3 | — | — |
+| ascon-record-encrypt | 3373.8 | 1862.4 | 105.4 | 58.2 |
+| ascon-record-decrypt | 3459.2 | 1925.1 | 108.1 | 60.2 |
+| ascon-record-mask | 1104.6 | 666.9 | — | — |
+
+\*All figures re-measured with a per-iteration SysTick accumulator (see
+`bench_record.c`): each record operation is timed individually and summed, so a
+single SysTick reload can never be mis-counted on a sub-period region. The
+earlier M3 mask (6303.8) and M0+ decrypt (9094.8) figures were wrap artifacts
+from the previous whole-loop timer; the corrected values above are internally
+consistent (decrypt ≈ encrypt + one P^12, mask is the cheapest operation).
 
 ### Findings
 
-- One protected DTLS application record costs **~4.1k (M0+) / ~2.4k (M3)
-  cycles to encrypt** and **~9.8k (M0+) / ~8.0k (M3) cycles to decrypt**, at
-  32 MHz ≈ 0.13 ms / 0.31 ms (encrypt / decrypt) on M0+. The record-number
-  mask adds ~1.3k / 0.8k cycles (an independent keyed permutation).
-- Decrypt is ~2.4× the encrypt cost because AEAD verification must process
-  the whole ciphertext before accepting — matching the primitive benchmark's
-  encrypt/decrypt asymmetry.
+- One protected DTLS application record costs **~3.4k (M0+) / ~1.9k (M3)
+  cycles to encrypt** and **~3.5k (M0+) / ~1.9k (M3) cycles to decrypt**, at
+  32 MHz ≈ 0.11 ms (M0+) / 0.06 ms (M3). The record-number mask adds
+  ~1.1k (M0+) / ~0.67k (M3) cycles (an independent keyed permutation).
+- Decrypt is only marginally above encrypt (~2–3%, one extra Ascon-P^12 on the
+  verification path) — there is no large AEAD decrypt/encrypt asymmetry here;
+  the earlier 9.1k M0+ decrypt figure was a SysTick wrap artifact, now removed.
 - These are **software-only emulated (Renode) numbers, not silicon**. They
   bound the per-message CPU cost on a constrained node and confirm the
   Ascon record path is cheap relative to the AES-GCM record path on the same
@@ -92,3 +99,17 @@ behind the "device-side record-path benchmarking" future-work item.
 - The record path includes the keyed-sponge record-number mask (design
   Option B, `ASCON_MASK_DOMSEP`), so the per-message cost already accounts
   for sequence-number protection, not just ciphertext.
+
+## Code footprint (full DTLS-suite comparison)
+
+The throughput rows above are honest about ChaCha20-Poly1305: Ascon loses to
+it on raw Cortex-M speed. Ascon's real advantage over ChaCha-Poly is **code
+footprint and a single primitive for AEAD+hash**, quantified in
+`footprint-benchmark.md`. Headline: in the **size-optimized (64-bit-word)
+Ascon build**, one 2,827 B (M0+) / 2,807 B (M3) object covers both AEAD and the
+handshake hash, versus 6,518 B (M0+) / 5,514 B (M3) for ChaCha20 + Poly1305 +
+SHA-256 — **Ascon ~2.3× (M0+) / ~2.0× (M3) smaller**. Under the
+32-bit-optimized Ascon build used for the cycle benchmarks above (9,476 / 8,784
+B), Ascon is *larger* than ChaCha-Poly, so the footprint win applies only to the
+size-optimized build. Both builds beat software AES-128-GCM on footprint
+(2.4×–7.9× smaller).
