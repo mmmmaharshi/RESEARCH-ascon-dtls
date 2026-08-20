@@ -5,8 +5,13 @@
 
 ## Proposed structure (standard applied-crypto paper)
 
-1. **Abstract** — what we did: added TLS_AEAD_WITH_ASCON_128 (0x006E) as a DTLS 1.3 record-protection suite; novel masked sequence number; bounded-security + symbolic analysis; Renode/footprint evidence on Cortex-M.
+1. **Abstract** — what we did: we present the **first open, reproducible implementation** of `TLS_AEAD_WITH_ASCON_128` (0x006E) as a DTLS 1.3 record-protection suite, with a masked sequence number, validated against OpenSSL and self-checking KAT vectors; plus an evaluation on embedded targets and a bounded-security argument. This is an **implementation + evaluation + bounded-security-argument paper** — Ascon-128 is a standardized primitive (FIPS 202 / SP 800-232); we propose no new cryptography.
 2. **1. Introduction** — motivation (IoT/constrained DTLS 1.3), gap (TLS 1.3 lacks a CAESAR-assembled AEAD; Ascon is the LWC winner but not in TLS), contributions.
+   - **Contribution class (R11):** this is an *implementation + evaluation + bounded-security-argument* paper. Ascon-128 is a standardized primitive (FIPS 202 / SP 800-232); we propose **no new cryptographic construction**. Our contributions:
+     - **(C1) Implementation** — first open wolfSSL DTLS 1.3 0x006E suite + masked-sequence-number record layer; interop with OpenSSL 3.6.3; committed self-checking KAT vectors.
+     - **(C2) Evaluation** — Renode-emulated Cortex-M0+/M3 throughput, footprint vs ChaCha20-Poly1305 / AES-GCM, per-record cycle costs.
+     - **(C3) Bounded-security argument** — M2 AEAD bounds + Robust-Channels game-hop + Tamarin (sequence-number privacy).
+   - The masked sequence number is a *design* contribution (reuse of `sn_key` for anti-replay), an instantiation choice — not a new construction. Honesty/claim boundaries: design-01-record-layer.md §6 ("Claims NOT made = no new AEAD theory").
 3. **2. Background** — DTLS 1.3 (RFC 9147) + TLS 1.3 key schedule (RFC 9846, obsoletes 8446); Ascon-128 AEAD; the sequence-number / nonce-reuse problem.
 4. **3. Design: 0x006E record layer**
    - 3.1 Key schedule (HKDF-Extract/Expand-Label over HMAC-Ascon-Hash256; labels unchanged) — src: `design-01-record-layer.md` §4.1, §5.
