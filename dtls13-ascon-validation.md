@@ -88,8 +88,9 @@ mode does not. This proves the AEAD tag authenticates the record.
 `wolfssl/src/dtls.c:161` sets `DTLS_COOKIE_TYPE = WC_SHA256`. The DTLS
 anti-amplification **cookie** uses SHA-256 at the *transport* layer, which is
 orthogonal to the TLS 1.3 handshake hash (Ascon-Hash256). This is an expected,
-RFC 6347-mandated mechanism and does not contradict the "no SHA-256 in the
-handshake crypto" property of the 0x006E suite.
+    RFC 6347-mandated mechanism and the precise restatement is: no SHA-256 in the
+    handshake transcript hash or record AEAD; the DTLS transport cookie retains
+    SHA-256 per RFC 6347.
 
 ## What this establishes vs. what remains
 

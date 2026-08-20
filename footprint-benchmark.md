@@ -40,8 +40,8 @@ wolfSSL's `ascon.c` has two implementations selected by `WOLFSSL_ASCON_32BIT`:
 The two Ascon builds are **not interchangeable**: the 2,827 B footprint claim
 is the size-optimized (64-bit-word) build, whereas the fresh throughput/cycle
 numbers (0.409 / 0.749 MiB/s on M0+ / M3) come from the 32-bit-optimized
-build used for the cycle benchmarks. The paper must state which build each
-number refers to.
+    build used for the cycle benchmarks. The paper must state which build each
+    number refers to. In both builds a DTLS node additionally links `sha256.o` for the RFC 6347 transport cookie; the suite-size totals in 'Full DTLS-suite footprint' include it.
 
 ## Per-object `.text` (bytes, Cortex-M0+ / M3)
 
@@ -60,9 +60,12 @@ number refers to.
 For each suite we sum the primitives the DTLS 1.3 record + handshake actually
 require:
 
-- **Ascon `0x006E`**: `ascon.o` — one permutation delivers **both** the AEAD
-  (record protection) **and** the hash (transcript + HKDF + Finished). No second
-  primitive is linked.
+  - **Ascon `0x006E`**: `ascon.o` — one permutation delivers **both** the AEAD
+    (record protection) **and** the handshake hash (transcript + HKDF + Finished).
+    The TLS 1.3 handshake needs no SHA-256. However, the **DTLS transport cookie
+    (RFC 6347) retains SHA-256** (`DTLS_COOKIE_TYPE = WC_SHA256` in
+    `wolfssl/src/dtls.c`), so a DTLS node additionally links `sha256.o` for the
+    cookie. `sha256.o` is therefore counted in the Ascon suite totals below.
 - **ChaCha20-Poly1305**: `chacha.o` + `poly1305.o` + `chacha20_poly1305.c` for
   the AEAD, **plus `sha256.o`** because the TLS 1.3 handshake (transcript hash,
   HKDF, Finished, PSK binders) runs on SHA-256, not on a ChaCha-derived hash.
@@ -70,7 +73,7 @@ require:
 
 | Suite (primitives linked) | M0+ (32BIT Ascon) | M0+ (size-opt Ascon) | M3 (32BIT Ascon) | M3 (size-opt Ascon) |
 |---|---:|---:|---:|---:|
-| Ascon 0x006E (AEAD+hash, 1 prim)      | 9,476 | **2,847** | 8,784 | **2,807** |
+| Ascon 0x006E (AEAD+hash; +SHA-256 cookie) | 11,848 | **5,219** | 10,688 | **4,711** |
 | ChaCha20-Poly1305 (+SHA-256)          | 6,518 | 6,518 | 5,514 | 5,514 |
 | AES-128-GCM (+SHA-256)                | 22,481 | 22,481 | 21,581 | 21,581 |
 
@@ -78,29 +81,35 @@ Ratios (smaller is better for footprint):
 
 | Comparison | M0+ (size-opt Ascon) | M3 (size-opt Ascon) | M0+ (32BIT Ascon) | M3 (32BIT Ascon) |
 |---|---:|---:|---:|---:|
-| ChaCha-Poly / Ascon | **0.44×** (Ascon 2.29× smaller) | **0.51×** (Ascon 1.96× smaller) | 0.69× (Ascon larger) | 0.63× (Ascon larger) |
-| AES-GCM / Ascon     | 7.90× (Ascon smaller) | 7.69× (Ascon smaller) | 2.37× (Ascon smaller) | 2.46× (Ascon smaller) |
+| ChaCha-Poly / Ascon | **0.80×** (Ascon 1.25× smaller) | **0.85×** (Ascon 1.17× smaller) | 0.55× (Ascon larger) | 0.52× (Ascon larger) |
+| AES-GCM / Ascon     | 4.31× (Ascon smaller) | 4.58× (Ascon smaller) | 1.90× (Ascon smaller) | 2.02× (Ascon smaller) |
 
 ## Findings
 
-- **Ascon's genuine footprint win over ChaCha20-Poly1305 holds only for the
-  size-optimized (64-bit-word) Ascon build**: a single 2,847 B (M0+) / 2,807 B
-  (M3) object covers both AEAD and the handshake hash, versus 6,518 B / 5,514 B
-  for ChaCha20 + Poly1305 + SHA-256 — **Ascon is ~2.3× (M0+) / ~2.0× (M3)
-  smaller.** This is the configuration behind the report's 2,827 B figure.
-- **Under the 32-bit-optimized Ascon build used for the throughput benchmark,
-  Ascon is *larger* than ChaCha-Poly** (9,476 vs 6,518 B on M0+; 8,784 vs
-  5,514 B on M3). The single-primitive advantage is outweighed by the
-  32-bit-decomposed permutation's code size. The paper must not claim a
-  footprint win for the 32BIT build.
-- **Both Ascon builds beat software AES-128-GCM decisively on footprint**
-  (2.4×–7.9× smaller), because AES-GCM needs the large table-based `aes.o`
-  plus SHA-256.
-- The honest headline (per reviewer R1) is therefore: *Ascon's advantage over
-  ChaCha20-Poly1305 on constrained nodes is code footprint and a single
-  primitive for AEAD+hash — not raw throughput. That footprint win is real for
-  the size-optimized Ascon build; it is not a throughput win, and it does not
-  hold for the 32-bit-optimized build used in the cycle benchmarks.*
+  - **Ascon's footprint win over ChaCha20-Poly1305 is real but modest, and holds
+    only for the size-optimized (64-bit-word) Ascon build**: the Ascon suite
+    (`ascon.o` + `sha256.o` for the DTLS cookie) totals 5,219 B (M0+) / 4,711 B
+    (M3), versus 6,518 B / 5,514 B for ChaCha20 + Poly1305 + SHA-256 — **Ascon is
+    ~1.25× (M0+) / ~1.17× (M3) smaller** (not the ~2.3×/2.0× previously stated;
+    that earlier figure omitted the cookie's SHA-256). This is the configuration
+    behind the report's 2,827 B `ascon.o` figure (cookie SHA-256 is added on top).
+  - **Under the 32-bit-optimized Ascon build used for the throughput benchmark,
+    Ascon is *larger* than ChaCha-Poly** (11,848 vs 6,518 B on M0+; 10,688 vs
+    5,514 B on M3 — about 1.8–1.9× larger). The single-primitive advantage is
+    outweighed by the 32-bit-decomposed permutation's code size plus the cookie
+    SHA-256. The paper must not claim a footprint win for the 32BIT build.
+  - **Both Ascon builds beat software AES-128-GCM on footprint**
+    (1.9×–4.6× smaller), because AES-GCM needs the large table-based `aes.o`
+    plus SHA-256; the gap is narrower than the earlier 2.4×–7.9× figure because
+    the Ascon totals now include the cookie SHA-256.
+  - The honest headline (per reviewer R1) is therefore: *Ascon's advantage over
+    ChaCha20-Poly1305 on constrained nodes is code footprint — the handshake hash
+    is folded into the Ascon primitive, while ChaCha-Poly needs a separate
+    SHA-256 for the handshake; the DTLS cookie adds SHA-256 to both, narrowing but
+    not erasing Ascon's lead (≈1.25×/1.17× smaller in the size-opt build) — not
+    raw throughput. The footprint win is real for the size-optimized Ascon build;
+    it is not a throughput win, and it does not hold for the 32-bit-optimized
+    build used in the cycle benchmarks.*
 
 ## Caveats
 

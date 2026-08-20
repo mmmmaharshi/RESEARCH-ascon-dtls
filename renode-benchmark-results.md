@@ -39,8 +39,10 @@ count; the `MiB/s` column is the throughput and is the comparison metric.)
   On these small cores, AES-GCM is by far the most expensive option.
 - **ASCON-AEAD is ~1.7× (M0+) / ~3.6× (M3) *slower* than ChaCha20-Poly1305 in
   raw throughput** (0.409 / 0.749 vs 0.691 / 2.725 MiB/s) on these cores.
-  ASCON-AEAD is a *single primitive* delivering both confidentiality and
-  authentication, whereas ChaCha-Poly is a ChaCha20 + Poly1305 composition.
+  ASCON-AEAD delivers both confidentiality and authentication in one primitive,
+  whereas ChaCha-Poly is a ChaCha20 + Poly1305 composition. (The DTLS transport
+  cookie still uses SHA-256 per RFC 6347, so a full DTLS Ascon node also links
+  `sha256.o`; see `footprint-benchmark.md`.)
   For an AEAD comparison ASCON-AEAD vs AES-GCM is the apples-to-apples pairing
   (Ascon wins decisively); see `footprint-benchmark.md` for the code-size axis
   where Ascon *does* win.
@@ -92,8 +94,9 @@ the benchmark already uses the fastest standard Ascon AEAD.**
   be done by the user in Renode, plus `make check` for bit-exact KATs.
 
 **Conclusion:** Ascon's legitimate, measured advantages over ChaCha20-Poly1305
-are (a) code footprint — one ~2.8 KB object for AEAD **and** the handshake hash
-vs ChaCha20 + Poly1305 + SHA-256 (~6.5 KB) in the size-optimized build — and
+are (a) code footprint — one ~2.8 KB `ascon.o` for AEAD **and** the handshake hash
+(plus `sha256.o` for the DTLS cookie) vs ChaCha20 + Poly1305 + SHA-256 (~6.5 KB)
+in the size-optimized build — and
 (b) decisively beating software AES-128-GCM. It does **not** win on raw
 Cortex-M throughput, and no standard Ascon variant changes that.
 
@@ -145,12 +148,12 @@ consistent (decrypt ≈ encrypt + one P^12, mask is the cheapest operation).
 
 The throughput rows above are honest about ChaCha20-Poly1305: Ascon loses to
 it on raw Cortex-M speed. Ascon's real advantage over ChaCha-Poly is **code
-footprint and a single primitive for AEAD+hash**, quantified in
-`footprint-benchmark.md`. Headline: in the **size-optimized (64-bit-word)
-Ascon build**, one 2,827 B (M0+) / 2,807 B (M3) object covers both AEAD and the
-handshake hash, versus 6,518 B (M0+) / 5,514 B (M3) for ChaCha20 + Poly1305 +
-SHA-256 — **Ascon ~2.3× (M0+) / ~2.0× (M3) smaller**. Under the
+footprint and a single primitive for AEAD+handshake-hash (the DTLS cookie still
+uses SHA-256), quantified in `footprint-benchmark.md`. Headline: in the **size-optimized (64-bit-word)
+Ascon build**, one 2,827 B (M0+) / 2,807 B (M3) `ascon.o` covers AEAD and the
+handshake hash, but the DTLS cookie adds `sha256.o` (5,219 B / 4,711 B total) vs 6,518 B (M0+) / 5,514 B (M3) for ChaCha20 + Poly1305 +
+(M0+) / 5,514 B (M3) for ChaCha20 + Poly1305 + SHA-256 — **Ascon ~1.25× (M0+) / ~1.17× (M3) smaller**. Under the
 32-bit-optimized Ascon build used for the cycle benchmarks above (9,476 / 8,784
 B), Ascon is *larger* than ChaCha-Poly, so the footprint win applies only to the
 size-optimized build. Both builds beat software AES-128-GCM on footprint
-(2.4×–7.9× smaller).
+(1.9×–4.6× smaller, after counting the DTLS cookie SHA-256).

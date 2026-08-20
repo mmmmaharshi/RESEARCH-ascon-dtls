@@ -287,12 +287,14 @@ The host cycle-per-byte values must not be used as embedded cycle values.
 
 The 2,827 B Ascon-object figure is the **size-optimized (64-bit-word) Ascon
 build** (`-UWOLFSSL_ASCON_32BIT`; this is `build\arm\ascon.o`). It is the build
-that makes Ascon's single-primitive footprint advantage real: one 2,827 B (M0+) /
-2,807 B (M3) object delivers **both** the AEAD (record protection) **and** the
-handshake hash (transcript, HKDF, Finished), whereas a ChaCha20-Poly1305 DTLS
-node must link ChaCha20 + Poly1305 + SHA-256 = 6,518 B (M0+) / 5,514 B (M3) —
-**Ascon is ~2.3× (M0+) / ~2.0× (M3) smaller.** Full table and methodology in
-`footprint-benchmark.md`.
+    that makes Ascon's footprint advantage real: one 2,827 B (M0+) / 2,807 B (M3)
+    `ascon.o` delivers **both** the AEAD (record protection) **and** the handshake
+    hash (transcript, HKDF, Finished), but the DTLS transport cookie retains SHA-256
+    (RFC 6347), so the full Ascon suite is `ascon.o` + `sha256.o` (cookie) =
+    5,219 B (M0+) / 4,711 B (M3); a ChaCha20-Poly1305 DTLS node must link
+    ChaCha20 + Poly1305 + SHA-256 = 6,518 B (M0+) / 5,514 B (M3) — **Ascon is
+    ~1.25× (M0+) / ~1.17× (M3) smaller.** Full table and methodology in
+    `footprint-benchmark.md`.
 
 Caveat (must be stated): the **throughput/cycle benchmarks above use the
 32-bit-optimized Ascon build** (`WOLFSSL_ASCON_32BIT`, 9,476 B on M0+ / 8,784 B
@@ -300,8 +302,8 @@ on M3). Under that build Ascon is *larger* than ChaCha-Poly (6,518 / 5,514 B), s
 the footprint win holds only for the size-optimized build, and the throughput
 numbers are a different build. **Ascon does not beat ChaCha20-Poly1305 in raw
 throughput on Cortex-M** — the honest headline is footprint and
-single-primitive AEAD+hash, not speed. Both Ascon builds beat software
-AES-128-GCM on footprint (2.4×–7.9× smaller).
+    AEAD+handshake-hash primitive (the DTLS cookie still uses SHA-256), not speed. Both Ascon builds beat software
+AES-128-GCM on footprint (1.9×–4.6× smaller, after counting the DTLS cookie SHA-256).
 
 ## DTLS application benchmark
 
@@ -417,8 +419,8 @@ outstanding from the earlier validation.
 - **No throughput claim vs ChaCha20-Poly1305.** Ascon does not beat
   ChaCha20-Poly1305 in raw Cortex-M throughput (0.409 / 0.749 MiB/s vs
    0.691 / 2.725 MiB/s). Its advantages over ChaCha-Poly are code footprint
-  (single 2,827 B object for AEAD+hash vs ChaCha20+Poly1305+SHA-256 ≈ 6.5 KB
-  in the size-optimized Ascon build) and a single primitive for AEAD+hash — see
+   (2,827 B `ascon.o` for AEAD+hash, plus `sha256.o` for the DTLS cookie, vs
+   ChaCha20+Poly1305+SHA-256 ≈ 6.5 KB in the size-optimized Ascon build) — see
   `footprint-benchmark.md`. The footprint win is real only for the
   size-optimized Ascon build, not the 32-bit-optimized build used for the
   cycle benchmarks.
