@@ -71,7 +71,7 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
 |---|-------|-------|----------------------|
 | C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
 | C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
-| C3 | Channel security (Robust Channels goals) | Paper proof, reduction to Ascon-AEAD128 + state-machine invariants | same as C1/C2 |
+| C3 | Channel security (Robust Channels goals: ROB-INT-IND-CCA) | Precondition-verification of [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9), §7 DTLS 1.3 analysis] given C1/C2 | ≤ Adv^{IND-CPA}_AEAD + Adv^{INT-CTXT}_AEAD(q_R) (non-tight: Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R·Adv^{INT-CTXT}_AEAD(1), q_R=2^16 enforced forgery attempts) |
 | C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound (derived in design-01 §4.2.1) | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
 | C5 | Committing security (defense-in-depth) | KSW 2023/1525 (TOSC 2024) prove Ascon committing-secure (one of only 3 finalists with a proof) | Applied, not derived |
 | C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. BCK96 (CRYPTO 1996) + sponge indifferentiability (Bertoni et al., EUROCRYPT 2008) + FIPS 198-1/202 precedent | structure identical to RFC 9846 |
@@ -86,16 +86,25 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
     (key, nonce) state machine is sound. The Ascon-AEAD128 AE-security
     bound (C1/C2) is the base assumption.
 
-    *Instantiate-and-use for Ascon-AEAD128.* Robust Channels treats the AEAD
-    as a nonce-respecting primitive and reduces channel security to the AEAD's
-    IND-CPA and INT-CTXT games; Ascon-AEAD128 satisfies both under the
-    ideal-permutation assumption (C1/C2). DTLS 1.3 packs each record's unique
-    (epoch, record_number) into a 128-bit nonce (RFC 9147 §4.2 / §4.2.3).
-    Because the nonce is unique per (key, record) within an epoch and keys
-    rotate at the usage limits (§4.3, RFC 9846 §4.7.3), there is no nonce
-    reuse and no multi-key or re-keying oracle beyond the protocol's own
-    KeyUpdate. The reduction therefore needs no extra game hops, and C3's
-    channel-security bound inherits C1/C2 directly.
+    *Precondition-verification (not a re-derivation) for Ascon-AEAD128.*
+    Robust Channels (FGJ20, ePrint 2020/718; Journal of Cryptology 2024, §7
+    DTLS 1.3 analysis) proves DTLS 1.3 is ROB-INT-IND-CCA-secure from any
+    IND-CPA + INT-CTXT AEAD, via Theorems 7.1 (robust integrity:
+    Adv^{ROB-INT} ≤ Adv^{INT-CTXT}_AEAD(q_R)) and 7.2 (IND-CPA:
+    Adv^{IND-CPA}_Ch ≤ Adv^{IND-CPA}_AEAD), combined by Proposition 5.9:
+        Adv^{ROB-INT-IND-CCA}(Ch) ≤ Adv^{IND-CPA}_AEAD
+                                 + Adv^{INT-CTXT}_AEAD(q_R)
+    where Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R · Adv^{INT-CTXT}_AEAD(1) is the non-
+    tight linear loss. We verify the preconditions hold: (i) Ascon-AEAD128 is
+    IND-CPA + INT-CTXT under the ideal-permutation assumption (C1/C2); (ii)
+    DTLS 1.3 packs each record's unique (epoch, record_number) into a 128-bit
+    nonce (RFC 9147 §4.2 / §4.2.3), so no nonce reuse within a key; (iii)
+    monotonic sequence numbers give sound anti-replay (§4.2); (iv) failed-
+    authentication KeyUpdate (RFC 9846 §4.7.3, enforced 2^16) bounds the
+    forgery attempts q_R. Channel security therefore follows from [FGJ20,
+    Thms 7.1 & 7.2 (via Prop. 5.9)] given C1/C2. The Adv^{INT-CTXT}_AEAD(q_R)
+    term is the linear robustness degradation FGJ20 identified — so C3's bound
+    is C1/C2 PLUS Adv^{INT-CTXT}_AEAD(q_R), NOT merely C1/C2.
 2. **State-machine invariants (§4.2).** Per-epoch keys, a 64→128-bit nonce
    padding (RFC 9147), and monotonic sequence numbers guarantee (key,
    nonce) uniqueness within an epoch and sound anti-replay. A forged
@@ -146,8 +155,9 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
   (TOSC 2024, ePrint 2023/1525). Exact value quoted: unmodified Ascon-128
   achieves 64-bit committing security (committing advantage ≤ 2^-64,
   birthday bound). Our usage (2^48 records/key) is 16 bits below this bound.
-- Robust Channels artifacts: no published companion code; the record-layer
-  proof is re-derived in the paper (authors may be contacted for scripts).
+- Robust Channels: no published companion code; channel security is
+   verified by precondition check citing [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9)] (DTLS 1.3 ROB-INT-IND-CCA, §7),
+   §7 DTLS 1.3 analysis) — not re-derived in this paper.
 - Sponge-HMAC citation chain: BCK96 + sponge indifferentiability +
   FIPS 198-1/202 approval precedent (HMAC-SHA3).
 

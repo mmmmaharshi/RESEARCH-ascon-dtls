@@ -20,7 +20,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 |---|-------|-------|----------------------|
 | C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
 | C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
-| C3 | Channel security (Robust Channels goals) | Paper proof, reduction to Ascon-AEAD128 + state-machine invariants | Same as C1/C2 |
+| C3 | Channel security (Robust Channels goals: ROB-INT-IND-CCA) | Precondition-verification of [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9), §7 DTLS 1.3 analysis] given C1/C2 | ≤ Adv^{IND-CPA}_AEAD + Adv^{INT-CTXT}_AEAD(q_R) (non-tight: Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R·Adv^{INT-CTXT}_AEAD(1), q_R=2^16 enforced forgery attempts) |
 | C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound (derived in design-01 §4.2.1) | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
 | C5 | Committing security (defense-in-depth) | KSW 2023/1525 (Krämer–Struck–Weishäupl, TOSC 2024, ePrint 2023/1525) prove unmodified Ascon-128 committing-secure at 64-bit (committing advantage ≤ 2^-64, birthday bound); one of only 3 finalists with a formal proof. Our usage (≤ 2^48 records/key) is 16 bits below this bound. Zero-padding caveat (Datta et al. 2026/1160) does NOT apply: those results target the committing zero-padding TRANSFORM on finalists; our nonce padding is the RFC 9147 64→128-bit nonce padding, a different mechanism | Applied, not derived |
 | C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. Citation chain: HMAC PRF theorem (Bellare–Canetti–Krawczyk, CRYPTO 1996) + sponge indifferentiability from RO (Bertoni–Daemen–Peeters–Van Assche, EUROCRYPT 2008) + approval precedent: HMAC-SHA3 is NIST-approved (FIPS 198-1 + FIPS 202) | Structure identical to RFC 9846 |
@@ -38,7 +38,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 
 ## 4. Security model
 
-- Robust Channels (Fischlin–Günther–Janson, ePrint 2020/718): record layer
+- Robust Channels (Fischlin–Günther–Janson, ePrint 2020/718; Journal of Cryptology 2024 — robust-CCA theorem, §7 DTLS 1.3 analysis): record layer
   under packet loss, reordering, replay-within-window, per-epoch keys.
 - RFC 9147 adversarial setting; retransmission reuse of (key, nonce) is safe
   and required (§4.2).
@@ -59,14 +59,24 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
     is 16 bits below this bound, so the claim is robust.
    Zero-padding attack results (Datta et al. 2026/1160, KSW §4) do not apply:
    they attack the committing zero-padding transform, not RFC 9147 nonce padding.
- 2. **Robust Channels record-layer reduction — CLOSED (re-derived).** No
-    companion artifacts (model/scripts/repo) are published with ePrint 2020/718,
-    so the instantiate-and-use reduction for Ascon-AEAD128 is re-derived
-    directly in the proof section: channel security reduces to Ascon-AEAD128's
-    IND-CPA/INT-CTXT (C1/C2); DTLS 1.3's unique (epoch, record_number) nonce
-    (RFC 9147 §4.2.3) plus the usage-limit KeyUpdate (RFC 9846 §4.7.3) give
-    nonce uniqueness with no extra game hops, so C3 inherits C1/C2. Authors may
-    be contacted for scripts if executable evidence is later required.
+ 2. **Robust Channels channel security — VERIFIED (precondition check, not
+    re-derived).** Fischlin–Günther–Janson (ePrint 2020/718; Journal of
+    Cryptology 2024, §7 DTLS 1.3 analysis) prove DTLS 1.3 is ROB-INT-IND-CCA-
+    secure from any IND-CPA + INT-CTXT AEAD, via Theorems 7.1 (robust
+    integrity: Adv^{ROB-INT} ≤ Adv^{INT-CTXT}_AEAD(q_R)) and 7.2 (IND-CPA:
+    Adv^{IND-CPA}_Ch ≤ Adv^{IND-CPA}_AEAD), combined by Proposition 5.9:
+        Adv^{ROB-INT-IND-CCA}(Ch) ≤ Adv^{IND-CPA}_AEAD
+                                 + Adv^{INT-CTXT}_AEAD(q_R)
+    where q_R = tolerated forgery attempts (failed-auth limit), and
+    Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R · Adv^{INT-CTXT}_AEAD(1) is the non-tight
+    linear loss. We verify the preconditions hold for our record layer: (i)
+    Ascon-AEAD128 is IND-CPA + INT-CTXT (= C1/C2); (ii) DTLS 1.3 packs a unique
+    (epoch, record_number) into a 128-bit nonce (RFC 9147 §4.2.3), no reuse;
+    (iii) monotonic sequence numbers give sound anti-replay (§4.2); (iv)
+    failed-authentication KeyUpdate (RFC 9846 §4.7.3, enforced 2^16) bounds q_R.
+    Plugging C1/C2 gives ≤ 2^-138 (C1) + 2^-112 (enforced q_R = 2^16). The
+    q_R term is the linear robustness degradation R3 requires us to surface;
+    C3 is therefore NOT bounded by C1/C2 alone.
 3. **Sponge-HMAC citation — CLOSED.** Chain: BCK96 (CRYPTO 1996) + sponge
    indifferentiability (Bertoni et al., EUROCRYPT 2008) + FIPS 198-1/202
    approval precedent. Keyed-sponge citations for the mask: Mennink ToSC
