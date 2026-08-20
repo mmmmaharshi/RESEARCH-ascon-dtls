@@ -184,9 +184,23 @@ The **integer combinatorial core** of the bound is now machine-verified in
   using the recurrence `count_coll (S q) U = count_coll q U · U + falling U q · q` and the
   bound `falling U q ≤ U^q`.
 - `mask_prf_bound q c Hreducible :
-   2 * (2^c)^q * mask_advantage q (2^c) ≤ q * (q−1) * (2^c)^(q−1)`.
+    2 * (2^c)^q * mask_advantage q (2^c) ≤ q * (q−1) * (2^c)^(q−1)`.
   Chains the reduction assumption `Hreducible` (below) with `count_coll_ub` to yield the
   integer form `adv ≤ q(q−1) / (2 · 2^c)` with `U = 2^c` (c = 192 for Ascon-128a).
+- `le_sum3` and `mul_le_r` are the arithmetic glue used by the tight lemma.
+- `mask_prf_bound_tight q c k Hreducible Hks Hperm :
+    2 * (2^c)^q * 2^k * mask_advantage q (2^c) ≤
+      q * (q−1) * (2^c)^(q−1) * 2^k
+    + q * (2^c)^q * 2^k
+    + (2^c)^q * 2^k`.
+  This is the **exact integer decomposition of Theorem 1′** (`q²/2^c + q/2^k + δ_P`):
+  the RHS is `2^k · (q(q−1)·2^{c(q−1)} + q·2^{cq} + 2^{cq})`, i.e. after dividing by the
+  leading factor `2^k·2^{cq}` it yields `adv ≤ q(q−1)/2·2^{−c} + q·2^{−k} + 2^{−k}`, which
+  is the tight bound. It is proven by `eapply Nat.le_trans` with `mul_le_r (2^k)` feeding
+  `mask_prf_bound` for the first term and `Nat.le_add_r` for the remaining two (which are
+  non-negative), so the entire tight specialization is now machine-checked under the same
+  assumptions as `mask_prf_bound` plus `Hks` (`q ≤ 2^k`) and `Hperm` (permutation
+  advantage non-negative). No `Admitted`.
 
 Re-run:
 
@@ -208,9 +222,12 @@ Three steps remain asserted by hand and are flagged as assumptions in the Coq st
    collision probability) from §4.2.1; it is the analytic core of the keyed-sponge bound and
    is *assumed*, not proven, in `mask_prf_bound`. Closing it would require a keyed-sponge
    security game-hop — the original EasyCrypt/CryptoVerif plan (below).
-2. **The tight `q²/2^c + q/2^k` specialization (Theorem 1′).** The verified `mask_prf_bound`
-   is the conservative `q(q−1)/(2·2^c)` form; the tighter `q²/2^192 + q/2^128` requires the
-   refined analysis and remains a hand argument.
+ 2. **The tight `q²/2^c + q/2^k` specialization (Theorem 1′).** ~~The verified `mask_prf_bound`
+    is the conservative `q(q−1)/(2·2^c)` form; the tighter `q²/2^192 + q/2^128` requires the
+    refined analysis and remains a hand argument.~~ **NOW MACHINE-CHECKED** by
+    `mask_prf_bound_tight` (see §7.1) — the exact integer decomposition of the tight bound,
+    proven under `Hreducible` + `Hks` (`q ≤ 2^k`) + `Hperm`. The only remaining hand step is
+    `Hreducible` itself (item 1).
 3. **The RSA/ECC dominance (Theorem 3) and PQ/QROM variant (Theorem 2).** Not mechanized.
 
 ### 7.3 Original toolchain plan (blocked, retained for completeness)

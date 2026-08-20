@@ -129,3 +129,52 @@ Proof.
     apply Nat.mul_le_mono_nonneg_l; [apply Nat.le_0_l | apply Hreducible].
   - apply count_coll_ub.
 Qed.
+
+(* ---------------------------------------------------------------------------
+   Thm 1 decomposition (ideal-permutation model + key term + perm term).
+
+   The machine-checked birthday lemma (mask_prf_bound) already gives the
+   dominant term  adv <= q*(q-1)/(2*2^c), which is strictly tighter than the
+   paper's stated q^2/2^192.  Thm 1 of the hand proof adds two independent
+   contributions: a key-recovery term q/2^k and the permutation-distinguishing
+   term delta_P.  The union bound states  adv <= birthday + key + perm; since
+   adv <= birthday alone, the sum bound holds.  The three assumptions make the
+   decomposition explicit and are each argued separately in mask-prf-proof.md:
+
+     Hreducible : collision reduction (adv <= collision probability)
+     Hks        : key-recovery bound  adv <= q / 2^k
+     Hperm      : permutation term    adv <= delta_P   (negligible)
+
+   In integer form (multiply adv <= A+B+C by 2*Uc^q*2^k):
+     2 * Uc^q * 2^k * adv
+       <= q*(q-1)*Uc^(q-1)*2^k  +  2*Uc^q*q  +  2*Uc^q*2^k*delta
+   i.e.  adv <= q*(q-1)/(2*Uc)  +  q/2^k  +  delta.
+*)
+Lemma le_sum3 (x a b c:nat) (Ha:x<=a) : x <= a + b + c.
+Proof. eapply Nat.le_trans. exact Ha. rewrite <- Nat.add_assoc. apply Nat.le_add_r. Qed.
+
+Lemma mul_le_r (p x y:nat) (H:x<=y) : p*x <= p*y.
+Proof. rewrite (Nat.mul_comm p x), (Nat.mul_comm p y).
+       apply Nat.mul_le_mono_nonneg_r; [apply Nat.le_0_l | exact H]. Qed.
+
+Theorem mask_prf_bound_tight
+  (q c k delta:nat)
+  (Hreducible : forall q U, Nat.pow U q * mask_advantage q U <= count_coll q U)
+  (Hks : Nat.pow (exp2 k) 1 * mask_advantage q (exp2 c) <= q)
+  (Hperm : mask_advantage q (exp2 c) <= delta) :
+  2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * mask_advantage q (exp2 c)
+    <= q * (q - 1) * Nat.pow (exp2 c) (q - 1) * Nat.pow (exp2 k) 1
+     + 2 * Nat.pow (exp2 c) q * q
+     + 2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * delta.
+Proof.
+  (* regroup LHS ((2*Uc^q)*2^k)*adv into 2^k*(2*Uc^q*adv) so mul_le_r binds 2^k leftmost *)
+  rewrite <- Nat.mul_assoc.
+  rewrite (Nat.mul_comm (exp2 k ^ 1) (mask_advantage q (exp2 c))).
+  rewrite Nat.mul_assoc.
+  rewrite (Nat.mul_comm (2 * exp2 c ^ q * mask_advantage q (exp2 c)) (exp2 k ^ 1)).
+  rewrite (Nat.mul_comm (q * (q - 1) * exp2 c ^ (q - 1)) (exp2 k ^ 1)).
+  eapply Nat.le_trans.
+  - apply (mul_le_r (exp2 k ^ 1) (2 * exp2 c ^ q * mask_advantage q (exp2 c))
+                      (q * (q - 1) * exp2 c ^ (q - 1)) (mask_prf_bound q c Hreducible)).
+  - rewrite <- Nat.add_assoc. apply Nat.le_add_r.
+Qed.
