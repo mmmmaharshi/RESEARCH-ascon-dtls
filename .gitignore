@@ -26,4 +26,10 @@ Thumbs.db
 # fork). Not vendored here; kept as a sibling checkout.
 wolfssl/
 
+# Coq build artifacts (mask_prf.v is the source — keep it tracked)
 tools/coq/*.vo
+tools/coq/*.vok
+tools/coq/*.vos
+tools/coq/*.glob
+tools/coq/.lia.cache
+tools/coq/.mask_prf.aux
