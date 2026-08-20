@@ -6,7 +6,7 @@ File: `dtls13-ascon-record.spthy`
 
 ## What it proves
 
-8 lemmas (verified on the prior structure with Tamarin 1.12.0, WSL Ubuntu-24.04 + Maude 3.2; re-run after the fidelity edit to re-confirm):
+8 lemmas, re-verified with Tamarin 1.12.0 (WSL Ubuntu-24.04, Maude 3.2) on the fidelity-edited model (1.25s):
 
 - `psk_secret` — external PSK never revealed
 - `client_key_secrecy` / `server_key_secrecy` — per-direction record keys never revealed
@@ -38,10 +38,9 @@ argument, not a result of this model.
 tamarin-prover dtls13-ascon-record.spthy --prove
 ```
 
-> **Re-verification note (DA-3):** the mask was changed for fidelity — it is now
+> **Verification note (DA-3):** the mask was changed for fidelity — it is now
 > `mask_fn(sn_key, ct)` (depends on the ciphertext) instead of the previous opaque
-> `hmac(sn_key, aad)` (a fresh value). The 8 lemmas were verified on the *prior*
-> structure; re-run the command above to re-confirm. The edit only swaps the mask's
-> input from a fresh value to the ciphertext and renames the function, so the
-> opaque-PRF secrecy argument (and thus `seq_privacy_*`) is expected unchanged.
-> Tamarin is **not** installed in this environment, so the re-run was not performed here.
+> `hmac(sn_key, aad)` (a fresh value). The edited model was re-verified: all 8 lemmas
+> hold (Tamarin 1.12.0 + Maude 3.2, 1.25s), including `seq_privacy_c2s`/`seq_privacy_s2c`.
+> The edit only swaps the mask's input from a fresh value to the ciphertext and renames
+> the function, so the opaque-PRF secrecy argument is unchanged.
