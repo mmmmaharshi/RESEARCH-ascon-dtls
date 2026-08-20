@@ -129,7 +129,15 @@ plus the keyed-permutation record-number mask (independent `sn_key`), and a
 modeled failed-authentication → forced-KeyUpdate decision (the `dropCount`
 compare against the 2^15 reference limit). This is the per-message cost the
 DTLS state machine pays on a constrained node — the missing empirical piece
-behind the "device-side record-path benchmarking" future-work item.
+  behind the "device-side record-path benchmarking" future-work item.
+
+  **Scope — cryptographic vs total per-record cost.** The figures below are the
+  *cryptographic* per-record cost: the Ascon permutation calls (encrypt,
+  decrypt, record-number mask) only. The *total* per-record processing cost on a
+  real DTLS stack additionally includes the (key, nonce) state machine, the
+  anti-replay window check, and record-header parsing; those are not captured by
+  this microbenchmark and add a fixed per-record overhead on top of the numbers
+  reported here.
 
 | Operation | Cortex-M0+ (cyc/rec) | Cortex-M3 (cyc/rec) | M0+ cyc/byte | M3 cyc/byte |
 |---|---:|---:|---:|---:|
@@ -160,8 +168,12 @@ bit-deterministic — verified with `tools/bench_10x.ps1`). Values are exact.
 - These are **software-only emulated (Renode) numbers, not silicon**. They
   bound the per-message CPU cost on a constrained node and confirm the
   Ascon record path is cheap relative to the AES-GCM record path on the same
-  cores (ASCON-AEAD was ~4.8× / ~3.5× faster than AES-128-GCM in the
-  throughput rows above).
+   cores (ASCON-AEAD was ~4.8× / ~3.5× faster than AES-128-GCM in the
+   throughput rows above). All AES-GCM figures here are **table-based software
+   AES with no hardware accelerator**; mid-range MCUs with an AES engine
+   (e.g., STM32 AES, SAM L11) would narrow or invert this gap, so the
+   comparison characterizes **software-AES-only devices** (see also the
+   footprint comparison caveat).
 - The record path includes the keyed-sponge record-number mask (design
   Option B, `ASCON_MASK_DOMSEP`), so the per-message cost already accounts
   for sequence-number protection, not just ciphertext.

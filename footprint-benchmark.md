@@ -105,10 +105,14 @@ Ratios (smaller is better for footprint):
     5,514 B on M3 — about 1.8–1.9× larger). The single-primitive advantage is
     outweighed by the 32-bit-decomposed permutation's code size plus the cookie
     SHA-256. The paper must not claim a footprint win for the 32BIT build.
-  - **Both Ascon builds beat software AES-128-GCM on footprint**
-    (1.9×–4.6× smaller), because AES-GCM needs the large table-based `aes.o`
-    plus SHA-256; the gap is narrower than the earlier 2.4×–7.9× figure because
-    the Ascon totals now include the cookie SHA-256.
+   - **Both Ascon builds beat software AES-128-GCM on footprint**
+     (1.9×–4.6× smaller), because AES-GCM needs the large table-based `aes.o`
+     plus SHA-256; the gap is narrower than the earlier 2.4×–7.9× figure because
+     the Ascon totals now include the cookie SHA-256. *Scope:* the AES-GCM
+     comparison assumes **software (table-based) AES with no hardware
+     accelerator**; an MCU with a built-in AES engine would change both the
+     footprint and the cycle comparison, so these results describe
+     **software-AES-only devices**.
   - The honest headline (per reviewer R1) is therefore: *Ascon's advantage over
     ChaCha20-Poly1305 on constrained nodes is code footprint — the handshake hash
     is folded into the Ascon primitive, while ChaCha-Poly needs a separate
