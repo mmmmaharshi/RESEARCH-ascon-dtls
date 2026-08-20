@@ -20,7 +20,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 |---|-------|-------|----------------------|
 | C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
 | C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
-| C3 | Channel security (Robust Channels goals: ROB-INT-IND-CCA) | Precondition-verification of [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9), §7 DTLS 1.3 analysis] given C1/C2 | ≤ Adv^{IND-CPA}_AEAD + Adv^{INT-CTXT}_AEAD(q_R) (non-tight: Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R·Adv^{INT-CTXT}_AEAD(1), q_R=2^16 enforced forgery attempts) |
+| C3 | Channel security (Robust Channels goals: ROB-INT-IND-CCA) | Precondition-verification + explicit Ascon-specific game-hop reduction (`robust-channels-game-hop.md`) built on [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9), §7 DTLS 1.3 analysis] given C1/C2 | ≤ Adv^{IND-CPA}_AEAD + Adv^{INT-CTXT}_AEAD(q_R) (non-tight: Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R·Adv^{INT-CTXT}_AEAD(1), q_R=2^16 enforced forgery attempts) |
 | C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound (derived in design-01 §4.2.1) | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
 | C5 | Committing security (defense-in-depth) | KSW 2023/1525 (Krämer–Struck–Weishäupl, TOSC 2024, ePrint 2023/1525) prove unmodified Ascon-128 committing-secure at 64-bit (committing advantage ≤ 2^-64, birthday bound); one of only 3 finalists with a formal proof. Our usage (≤ 2^48 records/key) is 16 bits below this bound. Zero-padding caveat (Datta et al. 2026/1160) does NOT apply: those results target the committing zero-padding TRANSFORM on finalists; our nonce padding is the RFC 9147 64→128-bit nonce padding, a different mechanism | Applied, not derived |
 | C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. Citation chain: HMAC PRF theorem (Bellare–Canetti–Krawczyk, CRYPTO 1996) + sponge indifferentiability from RO (Bertoni–Daemen–Peeters–Van Assche, EUROCRYPT 2008) + approval precedent: HMAC-SHA3 is NIST-approved (FIPS 198-1 + FIPS 202) | Structure identical to RFC 9846 |
@@ -59,8 +59,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
     is 16 bits below this bound, so the claim is robust.
    Zero-padding attack results (Datta et al. 2026/1160, KSW §4) do not apply:
    they attack the committing zero-padding transform, not RFC 9147 nonce padding.
- 2. **Robust Channels channel security — VERIFIED (precondition check, not
-    re-derived).** Fischlin–Günther–Janson (ePrint 2020/718; Journal of
+   2. **Robust Channels channel security — VERIFIED (precondition check + explicit Ascon-specific game-hop reduction in `robust-channels-game-hop.md`; FGJ20's generic channel proof is cited, not re-derived).** Fischlin–Günther–Janson (ePrint 2020/718; Journal of
     Cryptology 2024, §7 DTLS 1.3 analysis) prove DTLS 1.3 is ROB-INT-IND-CCA-
     secure from any IND-CPA + INT-CTXT AEAD, via Theorems 7.1 (robust
     integrity: Adv^{ROB-INT} ≤ Adv^{INT-CTXT}_AEAD(q_R)) and 7.2 (IND-CPA:

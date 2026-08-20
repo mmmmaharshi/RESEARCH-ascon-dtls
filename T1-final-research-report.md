@@ -71,7 +71,7 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
 |---|-------|-------|----------------------|
 | C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
 | C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
-| C3 | Channel security (Robust Channels goals: ROB-INT-IND-CCA) | Precondition-verification of [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9), §7 DTLS 1.3 analysis] given C1/C2 | ≤ Adv^{IND-CPA}_AEAD + Adv^{INT-CTXT}_AEAD(q_R) (non-tight: Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R·Adv^{INT-CTXT}_AEAD(1), q_R=2^16 enforced forgery attempts) |
+| C3 | Channel security (Robust Channels goals: ROB-INT-IND-CCA) | Precondition-verification + explicit Ascon-specific game-hop reduction (`robust-channels-game-hop.md`) built on [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9), §7 DTLS 1.3 analysis] given C1/C2 | ≤ Adv^{IND-CPA}_AEAD + Adv^{INT-CTXT}_AEAD(q_R) (non-tight: Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R·Adv^{INT-CTXT}_AEAD(1), q_R=2^16 enforced forgery attempts) |
 | C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound (derived in design-01 §4.2.1) | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
 | C5 | Committing security (defense-in-depth) | KSW 2023/1525 (TOSC 2024) prove Ascon committing-secure (one of only 3 finalists with a proof) | Applied, not derived |
 | C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. BCK96 (CRYPTO 1996) + sponge indifferentiability (Bertoni et al., EUROCRYPT 2008) + FIPS 198-1/202 precedent | structure identical to RFC 9846 |
@@ -86,7 +86,7 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
     (key, nonce) state machine is sound. The Ascon-AEAD128 AE-security
     bound (C1/C2) is the base assumption.
 
-    *Precondition-verification (not a re-derivation) for Ascon-AEAD128.*
+    *Precondition-verification + explicit Ascon-specific game-hop reduction (`robust-channels-game-hop.md`) for Ascon-AEAD128 (FGJ20's generic channel proof is cited, not re-derived).*
     Robust Channels (FGJ20, ePrint 2020/718; Journal of Cryptology 2024, §7
     DTLS 1.3 analysis) proves DTLS 1.3 is ROB-INT-IND-CCA-secure from any
     IND-CPA + INT-CTXT AEAD, via Theorems 7.1 (robust integrity:
