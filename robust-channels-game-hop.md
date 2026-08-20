@@ -78,7 +78,7 @@ identified; it is exactly why C3 is NOT bounded by C1/C2 alone.
 
 ## Plug-in: Ascon bounds (C1/C2, SP 800-232)
 
-- Confidentiality: `Adv^{IND-CPA}_AEAD ≤ 2^-76` (C1, 2^48−1 records/key).
+- Confidentiality: `Adv^{IND-CPA}_AEAD ≤ 2^-92` (C1, 2^54-byte NIST SP 800-232 cap).
 - Integrity: with enforced `q_R = 2^16` and single-query forgery probability
   `≤ 2^-128` (128-bit Ascon tag),
 
@@ -86,7 +86,7 @@ identified; it is exactly why C3 is NOT bounded by C1/C2 alone.
 
   This equals the enforced C2 figure (`≤ 2^-112`), confirming the two
   framings agree. (The protocol cap `q_R ≤ 2^48` would give `≤ 2^-80`.)
-- **Total:** `Adv^{ROB-INT-IND-CCA}_A(Ch) ≤ 2^-76 + 2^-112`.
+- **Total:** `Adv^{ROB-INT-IND-CCA}_A(Ch) ≤ 2^-92 + 2^-112`.
 
 ## Note on q_R binding
 

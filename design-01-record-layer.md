@@ -91,8 +91,8 @@
 
 | Limit | Value | Binding constraint | Resulting advantage |
 | --- | --- | --- | --- |
-| Records protected per key | 2^48 - 1 | Protocol cap (seq_num space, RFC 9147 §4.2) | privacy ≤ 2^-76 |
-| Bytes per key | 2^48 records x 2^14 = 2^62 | Protocol cap (max record 2^14 bytes) | — |
+| Records protected per key | 2^48 - 1 (≤64-B records); NIST 2^54-byte cap binds first for larger records | Protocol cap (seq_num space, RFC 9147 §4.2) / NIST SP 800-232 R6 | privacy ≤ 2^-92 |
+| Bytes per key | min(2^62 protocol max, 2^54 NIST cap) = 2^54 (2^50 blocks) | NIST SP 800-232 R6 (binds for records > 64 B; 2^48-record protocol cap binds for ≤64-B records) | privacy ≤ 2^-92 |
 | Records failing authentication per key | 2^48 | Protocol cap; 128-bit tag | forgery ≤ 2^-80 |
 
   **Implementation note (verified):** the wolfSSL fork enforces wolfSSL's
@@ -109,9 +109,9 @@
   `dtls13-ascon-validation.md` §4.3).
 
 Derivation:
-- Confidentiality: Ascon-128a (the implemented Ascon-AEAD128) has r=128, c=192. PRF-indistinguishability advantage ~ q_b^2/2^192 + q/2^128 (q_b = rate blocks). At protocol max (2^48-1 records/key ≈ 2^58 rate blocks at max record size): 2^116/2^192 = 2^-76 (≈2^-94 for typical 32-byte records). Not binding.
+- Confidentiality: Ascon-128a (the implemented Ascon-AEAD128) has r=128, c=192. PRF-indistinguishability advantage ~ q_b^2/2^192 + q/2^128 (q_b = rate blocks). Realized data cap is min(2^62-byte protocol max, 2^54-byte NIST SP 800-232 R6 cap) = 2^54 bytes = 2^50 rate blocks: 2^100/2^192 = 2^-92 (record-size-dependent binding: 2^48-record protocol cap binds for records ≤ 64 B; NIST 2^54-byte cap binds first for larger records). Not binding.
 - Integrity: per-attempt forgery <= 2^-128 (128-bit tag); cumulative <= q_f/2^128. At q_f = 2^48: 2^-80, below the 2^-60 rule of thumb (cf. [AEBounds]). Not binding.
-- Publishable observation: both limits are set by the PROTOCOL caps, not by Ascon's bounds — unlike AES-GCM (2^24.5 records) and AEAD_AES_128_CCM_8 (banned for DTLS: 2^48/2^64 = 2^-16). The 64-bit seq space + 128-bit tag make Ascon's usage limits vacuous for DTLS 1.3.
+- Publishable observation: the binding usage constraint is record-size-dependent. For records ≤ 64 B the 2^48-record protocol cap binds (≤ 2^54 bytes, NIST satisfied); for larger records the NIST SP 800-232 R6 2^54-byte cap binds first (e.g., 2^40 records at max 2^14-B records). Ascon's usage limit is therefore NOT vacuous for large records — unlike AES-GCM (2^24.5 records) and AEAD_AES_128_CCM_8 (banned for DTLS: 2^48/2^64 = 2^-16), but the realized privacy bound (2^-92) stays far below the 2^-60 rule of thumb.
 - Committing bound (KSW 2023, ePrint 2023/1525, Krämer–Struck–Weishäupl, TOSC 2024): unmodified Ascon-128 message-commitment security = 64-bit (committing advantage ≤ 2^-64, birthday bound). Our usage (≤ 2^48 records/key) is 16 bits below this bound. Not a usage-limit constraint; the zero-padding caveat of Datta et al. (2026/1160) does not apply (targets the committing zero-padding transform, not RFC 9147 nonce padding).
 - Implementation requirement: count failed authentications per (epoch, key); force KeyUpdate / new epoch before either limit. In practice rekey cadence is set by deployment policy, since both limits exceed any realistic session.
 
