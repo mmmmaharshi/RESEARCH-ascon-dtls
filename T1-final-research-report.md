@@ -72,10 +72,10 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
 | C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
 | C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
 | C3 | Channel security (Robust Channels goals) | Paper proof, reduction to Ascon-AEAD128 + state-machine invariants | same as C1/C2 |
-| C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
+| C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound (derived in design-01 §4.2.1) | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
 | C5 | Committing security (defense-in-depth) | KSW 2023/1525 (TOSC 2024) prove Ascon committing-secure (one of only 3 finalists with a proof) | Applied, not derived |
 | C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. BCK96 (CRYPTO 1996) + sponge indifferentiability (Bertoni et al., EUROCRYPT 2008) + FIPS 198-1/202 precedent | structure identical to RFC 9846 |
-| C7 | Mask PRF soundness | Keyed-sponge refs: Mennink ToSC 2018/449; Dobraunig–Mennink ToSC 2019/573; Hosoyamada 2025/1059 (PQ) | q^2/2^192 + q/2^128 |
+| C7 | Mask PRF soundness | Keyed-sponge refs: Mennink ToSC 2018/449; Dobraunig–Mennink ToSC 2019/573; Hosoyamada 2025/1059 (PQ) | q^2/2^192 + q/2^128 (derived in design-01 §4.2.1) |
 
 ### Reduction structure
 
@@ -113,8 +113,10 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
    it adds no second input path into the AEAD security argument. Because
    it is ciphertext-dependent, wire sequence numbers are pseudorandom to
    an observer without `sn_key`; a fixed mask would leak the record count.
-   PRF bound q^2/2^192 + q/2^128 is negligible to q ≈ 2^96, far beyond
-   the 2^48 wire-sequence limit.
+    PRF bound is q^2/2^192 + q/2^128 (negligible to q ≈ 2^96, far beyond the
+    2^48 wire-sequence limit), derived in design-01 §4.2.1 from the keyed-sponge
+    PRF analysis: capacity-collision term q^2/2^c plus key-prediction term q/2^k
+    tightened by Mennink ToSC 2018/449, Theorem 1.
  5. **Committing security.** Ascon is committing-secure: Krämer–Struck–
     Weishäupl (KSW, TOSC 2024, ePrint 2023/1525) prove unmodified Ascon-128
     achieves **64-bit committing security** — committing advantage ≤ 2^-64,

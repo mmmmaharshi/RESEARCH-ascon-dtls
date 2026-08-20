@@ -21,10 +21,10 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 | C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
 | C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
 | C3 | Channel security (Robust Channels goals) | Paper proof, reduction to Ascon-AEAD128 + state-machine invariants | Same as C1/C2 |
-| C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
+| C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound (derived in design-01 §4.2.1) | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
 | C5 | Committing security (defense-in-depth) | KSW 2023/1525 (Krämer–Struck–Weishäupl, TOSC 2024, ePrint 2023/1525) prove unmodified Ascon-128 committing-secure at 64-bit (committing advantage ≤ 2^-64, birthday bound); one of only 3 finalists with a formal proof. Our usage (≤ 2^48 records/key) is 16 bits below this bound. Zero-padding caveat (Datta et al. 2026/1160) does NOT apply: those results target the committing zero-padding TRANSFORM on finalists; our nonce padding is the RFC 9147 64→128-bit nonce padding, a different mechanism | Applied, not derived |
 | C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. Citation chain: HMAC PRF theorem (Bellare–Canetti–Krawczyk, CRYPTO 1996) + sponge indifferentiability from RO (Bertoni–Daemen–Peeters–Van Assche, EUROCRYPT 2008) + approval precedent: HMAC-SHA3 is NIST-approved (FIPS 198-1 + FIPS 202) | Structure identical to RFC 9846 |
-| C7 | Mask PRF soundness | Keyed-sponge references for §4.2.1 Option B: Key Prediction Security of Keyed Sponges (Mennink, IACR ToSC 2018/449); Security of the Suffix Keyed Sponge (Dobraunig–Mennink, ToSC 2019/573); PQ extension: Hosoyamada 2025/1059 (keyed sponges incl. Ascon, quantum) | q^2/2^192 + q/2^128 |
+| C7 | Mask PRF soundness | Keyed-sponge references for §4.2.1 Option B: Key Prediction Security of Keyed Sponges (Mennink, IACR ToSC 2018/449); Security of the Suffix Keyed Sponge (Dobraunig–Mennink, ToSC 2019/573); PQ extension: Hosoyamada 2025/1059 (keyed sponges incl. Ascon, quantum) | q^2/2^192 + q/2^128 (derived in design-01 §4.2.1) |
 
 ## 3. Non-claims (explicit boundaries)
 
