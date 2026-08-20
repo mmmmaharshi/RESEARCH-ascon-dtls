@@ -1,10 +1,13 @@
 param(
-    [string]$Core = "m0plus"   # m0plus | m3
+    [string]$Core = "m0plus",  # m0plus | m3
+    [switch]$SizeOpt           # when set, build with 64-bit-word Ascon (WOLFSSL_ASCON_32BIT undefined)
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $gcc = "arm-none-eabi-gcc"
 $mcpu = if ($Core -eq "m0plus") { "cortex-m0plus" } else { "cortex-m3" }
+$asconDef = if ($SizeOpt) { "-UWOLFSSL_ASCON_32BIT" } else { "-DWOLFSSL_ASCON_32BIT" }
+$suffix = if ($SizeOpt) { "-sizeopt" } else { "" }
 
 $defs = @(
     "-DWOLFSSL_USER_SETTINGS",
@@ -21,7 +24,7 @@ $defs = @(
     "-DNO_RSA",
     "-DNO_DH",
     "-DNO_PWDBASED",
-    "-DWOLFSSL_BENCHMARK_FIXED_UNITS_MB", "-DWOLFSSL_ASCON_32BIT"
+    "-DWOLFSSL_BENCHMARK_FIXED_UNITS_MB", $asconDef
 )
 $incs = @(
     "-I$root",
@@ -61,7 +64,7 @@ $gccArgs = @(
     "-Wl,-e,reset_handler",
     "-Wl,-u,_printf_float",
     "--specs=nano.specs", "--specs=nosys.specs",
-    "-o", "$PSScriptRoot\out\bench-$Core.elf"
+    "-o", "$PSScriptRoot\out\bench-$Core$suffix.elf"
 )
 & $gcc @gccArgs 2> "$PSScriptRoot\out\bench-$Core.build.log"
 $buildLog = Get-Content "$PSScriptRoot\out\bench-$Core.build.log" -Raw
