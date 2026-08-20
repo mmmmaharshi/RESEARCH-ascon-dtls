@@ -273,6 +273,26 @@ The hash and HMAC matrix also used three runs and median values:
 The Cortex-M0 compile-only result remains 2,827 bytes for the Ascon object.
 The host cycle-per-byte values must not be used as embedded cycle values.
 
+### Code footprint — Ascon vs ChaCha20-Poly1305 (the honest comparison)
+
+The 2,827 B Ascon-object figure is the **size-optimized (64-bit-word) Ascon
+build** (`-UWOLFSSL_ASCON_32BIT`; this is `build\arm\ascon.o`). It is the build
+that makes Ascon's single-primitive footprint advantage real: one 2,827 B (M0+) /
+2,807 B (M3) object delivers **both** the AEAD (record protection) **and** the
+handshake hash (transcript, HKDF, Finished), whereas a ChaCha20-Poly1305 DTLS
+node must link ChaCha20 + Poly1305 + SHA-256 = 6,518 B (M0+) / 5,514 B (M3) —
+**Ascon is ~2.3× (M0+) / ~2.0× (M3) smaller.** Full table and methodology in
+`footprint-benchmark.md`.
+
+Caveat (must be stated): the **throughput/cycle benchmarks above use the
+32-bit-optimized Ascon build** (`WOLFSSL_ASCON_32BIT`, 9,476 B on M0+ / 8,784 B
+on M3). Under that build Ascon is *larger* than ChaCha-Poly (6,518 / 5,514 B), so
+the footprint win holds only for the size-optimized build, and the throughput
+numbers are a different build. **Ascon does not beat ChaCha20-Poly1305 in raw
+throughput on Cortex-M** — the honest headline is footprint and
+single-primitive AEAD+hash, not speed. Both Ascon builds beat software
+AES-128-GCM on footprint (2.4×–7.9× smaller).
+
 ## DTLS application benchmark
 
 The DTLS measurements include process start, socket setup, handshake, one
@@ -318,8 +338,10 @@ The native Windows executable sizes were:
 | benchmark.exe | 191,642 bytes |
 
 The ARM compile-only result for `build\arm\ascon.o` was 2,827 bytes of text,
-with zero data and zero BSS. These sizes do not predict final embedded image
-size or RAM use.
+with zero data and zero BSS. This is the size-optimized (64-bit-word) Ascon
+build; the cycle/throughput benchmarks use the 32-bit-optimized build
+(`WOLFSSL_ASCON_32BIT`, 9,476 B on M0+). These sizes do not predict final
+embedded image size or RAM use.
 
 ## X.509 result
 
