@@ -382,6 +382,22 @@ outstanding from the earlier validation.
 - AES-GCM was measured as table-based software AES because `WOLFSSL_AESNI`
   was not defined in this build. A hardware-AES target would show different
   AES-GCM numbers.
+- **No throughput claim vs ChaCha20-Poly1305.** Ascon does not beat
+  ChaCha20-Poly1305 in raw Cortex-M throughput (0.409 / 0.749 MiB/s vs
+   0.691 / 2.725 MiB/s). Its advantages over ChaCha-Poly are code footprint
+  (single 2,827 B object for AEAD+hash vs ChaCha20+Poly1305+SHA-256 ≈ 6.5 KB
+  in the size-optimized Ascon build) and a single primitive for AEAD+hash — see
+  `footprint-benchmark.md`. The footprint win is real only for the
+  size-optimized Ascon build, not the 32-bit-optimized build used for the
+  cycle benchmarks.
+- **No faster standard Ascon AEAD variant exists.** wolfSSL's `wc_AsconAEAD128`
+  is already Ascon-128a (rate 128-bit, 8 per-block rounds) — the fastest
+  standard Ascon AEAD. Closing the ChaCha-Poly throughput gap would require an
+  ARM-optimized Ascon permutation (wolfSSL ships none; `ascon-c` has
+  public-domain `bi32_armv7m`/`bi32_armv6m`); this was not implemented and
+  cannot be measured here (Renode unavailable). The benchmark's ChaCha baseline
+  is also C-only (ARM assembly blocked by a wolfSSL build-generated header). See
+  `renode-benchmark-results.md` ("Can Ascon beat ChaCha20-Poly1305…").
 - The DTLS application timings are end-to-end host wall-clock values. They
   include process start and shutdown and must not be read as handshake-only
   or embedded timings.
