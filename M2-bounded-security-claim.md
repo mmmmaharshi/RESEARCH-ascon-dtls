@@ -18,7 +18,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 
 | # | Claim | Basis | Bound at usage limit |
 |---|-------|-------|----------------------|
-| C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
+| C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-76 (2^48-1 records/key) |
 | C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
 | C3 | Channel security (Robust Channels goals: ROB-INT-IND-CCA) | Precondition-verification + explicit Ascon-specific game-hop reduction (`robust-channels-game-hop.md`) built on [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9), §7 DTLS 1.3 analysis] given C1/C2 | ≤ Adv^{IND-CPA}_AEAD + Adv^{INT-CTXT}_AEAD(q_R) (non-tight: Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R·Adv^{INT-CTXT}_AEAD(1), q_R=2^16 enforced forgery attempts) |
 | C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound (derived in design-01 §4.2.1); sn_key is HKDF-PRF-independent from the AEAD key — same traffic secret, distinct label, `≤ Adv^{PRF}_{HMAC-Ascon-Hash256}` (design-01 §4.2.1) | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
@@ -74,7 +74,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
     (epoch, record_number) into a 128-bit nonce (RFC 9147 §4.2.3), no reuse;
     (iii) monotonic sequence numbers give sound anti-replay (§4.2); (iv)
     failed-authentication KeyUpdate (RFC 9846 §4.7.3, enforced 2^16) bounds q_R.
-    Plugging C1/C2 gives ≤ 2^-138 (C1) + 2^-112 (enforced q_R = 2^16). The
+    Plugging C1/C2 gives ≤ 2^-76 (C1) + 2^-112 (enforced q_R = 2^16). The
     q_R term is the linear robustness degradation R3 requires us to surface;
     C3 is therefore NOT bounded by C1/C2 alone.
 3. **Sponge-HMAC citation — CLOSED.** Chain: BCK96 (CRYPTO 1996) + sponge

@@ -91,7 +91,7 @@
 
 | Limit | Value | Binding constraint | Resulting advantage |
 | --- | --- | --- | --- |
-| Records protected per key | 2^48 - 1 | Protocol cap (seq_num space, RFC 9147 §4.2) | privacy ≤ 2^-138 |
+| Records protected per key | 2^48 - 1 | Protocol cap (seq_num space, RFC 9147 §4.2) | privacy ≤ 2^-76 |
 | Bytes per key | 2^48 records x 2^14 = 2^62 | Protocol cap (max record 2^14 bytes) | — |
 | Records failing authentication per key | 2^48 | Protocol cap; 128-bit tag | forgery ≤ 2^-80 |
 
@@ -109,7 +109,7 @@
   `dtls13-ascon-validation.md` §4.3).
 
 Derivation:
-- Confidentiality: Ascon-128 has r=64, c=256. PRF-indistinguishability advantage ~ q_b^2/2^256 + q/2^128 (q_b = rate blocks). At protocol max (2^62 bytes ~ 2^59 blocks): 2^118/2^256 = 2^-138. Not binding.
+- Confidentiality: Ascon-128a (the implemented Ascon-AEAD128) has r=128, c=192. PRF-indistinguishability advantage ~ q_b^2/2^192 + q/2^128 (q_b = rate blocks). At protocol max (2^48-1 records/key ≈ 2^58 rate blocks at max record size): 2^116/2^192 = 2^-76 (≈2^-94 for typical 32-byte records). Not binding.
 - Integrity: per-attempt forgery <= 2^-128 (128-bit tag); cumulative <= q_f/2^128. At q_f = 2^48: 2^-80, below the 2^-60 rule of thumb (cf. [AEBounds]). Not binding.
 - Publishable observation: both limits are set by the PROTOCOL caps, not by Ascon's bounds — unlike AES-GCM (2^24.5 records) and AEAD_AES_128_CCM_8 (banned for DTLS: 2^48/2^64 = 2^-16). The 64-bit seq space + 128-bit tag make Ascon's usage limits vacuous for DTLS 1.3.
 - Committing bound (KSW 2023, ePrint 2023/1525, Krämer–Struck–Weishäupl, TOSC 2024): unmodified Ascon-128 message-commitment security = 64-bit (committing advantage ≤ 2^-64, birthday bound). Our usage (≤ 2^48 records/key) is 16 bits below this bound. Not a usage-limit constraint; the zero-padding caveat of Datta et al. (2026/1160) does not apply (targets the committing zero-padding transform, not RFC 9147 nonce padding).

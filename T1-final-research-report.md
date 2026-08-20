@@ -71,7 +71,7 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
 
 | # | Claim | Basis | Bound at usage limit |
 |---|-------|-------|----------------------|
-| C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-138 (2^48-1 records/key) |
+| C1 | AEAD confidentiality (privacy) | SP 800-232 bounds, applied | ≤ 2^-76 (2^48-1 records/key) |
 | C2 | AEAD integrity (forgery) | SP 800-232 bounds, applied | ≤ 2^-80 (2^48 failures/key, protocol cap); reference impl enforces 2^16 → ≤ 2^-112 |
 | C3 | Channel security (Robust Channels goals: ROB-INT-IND-CCA) | Precondition-verification + explicit Ascon-specific game-hop reduction (`robust-channels-game-hop.md`) built on [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9), §7 DTLS 1.3 analysis] given C1/C2 | ≤ Adv^{IND-CPA}_AEAD + Adv^{INT-CTXT}_AEAD(q_R) (non-tight: Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R·Adv^{INT-CTXT}_AEAD(1), q_R=2^16 enforced forgery attempts) |
 | C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound (derived in design-01 §4.2.1) | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
@@ -136,8 +136,9 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
     2^48 wire-sequence limit), derived in design-01 §4.2.1 from the keyed-sponge
     PRF analysis: capacity-collision term q^2/2^c plus key-prediction term q/2^k
     tightened by Mennink ToSC 2018/449, Theorem 1.
- 5. **Committing security.** Ascon is committing-secure: Krämer–Struck–
-    Weishäupl (KSW, TOSC 2024, ePrint 2023/1525) prove unmodified Ascon-128
+ 5. **Committing security.** Ascon is committing-secure:     Krämer–Struck–
+    Weishäupl (KSW, TOSC 2024, ePrint 2023/1525) prove unmodified Ascon-128 (our
+    AEAD is the Ascon-128a variant, which shares the 192-bit capacity and the same 64-bit committing bound)
     achieves **64-bit committing security** — committing advantage ≤ 2^-64,
     bounded by a generic birthday attack on the capacity — and is one of only
     three LWC finalists with a formal committing-security proof. The mask uses
