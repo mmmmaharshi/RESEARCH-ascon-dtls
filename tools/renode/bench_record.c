@@ -4,6 +4,20 @@
 #include "wolfssl/wolfcrypt/ascon.h"
 #include "wolfssl/wolfcrypt/types.h"
 
+/* Single-iteration SysTick timer. The Cortex-M SysTick is a 24-bit DOWN
+ * counter clocked at the CPU frequency (32 MHz here). For any region shorter
+ * than the 24-bit reload period (~0.5 s), the elapsed tick count is exactly
+ *     (start - end) & 0x00FFFFFF
+ * with no wrap accounting. We therefore time EACH record iteration
+ * individually and accumulate: a single iteration is far below the period, so
+ * there is no wrap ambiguity. (An earlier whole-loop timer could mis-count a
+ * single SysTick reload on a sub-period region, producing a spurious M3
+ * record-mask figure.) The throughput benchmark keeps its own bench_current_time().
+ */
+#define REC_SYST_CVR       (*(volatile uint32_t*)0xE000E018u)
+#define REC_START()        do { rec_t0 = REC_SYST_CVR; } while (0)
+#define REC_END_ADD(total) do { (total) += (rec_t0 - REC_SYST_CVR) & 0x00FFFFFFu; } while (0)
+
 #define REC_PT_SZ 32
 #define REC_ITERS 3000
 #define REC_MASK_ITERS 3000
@@ -35,7 +49,9 @@ void record_bench(void)
 {
     word32 i;
     byte pt[REC_PT_SZ], ct[REC_PT_SZ], tag[ASCON_AEAD128_TAG_SZ], mask[16];
-    double t0, t1, cyc, cycPer;
+    uint64_t encCyc = 0, decCyc = 0, maskCyc = 0;
+    static uint32_t rec_t0;
+    double cyc, cycPer;
     int dropCount = 0;
     int ret;
 
@@ -44,29 +60,29 @@ void record_bench(void)
     /* ---- per-record encrypt ---- */
     for (i = 0; i < REC_PT_SZ; i++) pt[i] = (byte)(i & 0xff);
     bench_xprintf("REC_ENC_START\n");
-    t0 = bench_current_time(1);
     for (i = 0; i < REC_ITERS; i++) {
         wc_AsconAEAD128 a;
         build_nonce(i);
+        REC_START();
         wc_AsconAEAD128_Init(&a);
         wc_AsconAEAD128_SetKey(&a, trafficKey);
         wc_AsconAEAD128_SetNonce(&a, g_nonce);
         wc_AsconAEAD128_SetAD(&a, aad, sizeof(aad));
         wc_AsconAEAD128_EncryptUpdate(&a, ct, pt, REC_PT_SZ);
         wc_AsconAEAD128_EncryptFinal(&a, tag);
+        REC_END_ADD(encCyc);
     }
-    t1 = bench_current_time(0);
-    cyc = (t1 - t0) * 32000000.0 / (double)REC_ITERS;
+    cyc = (double)encCyc / (double)REC_ITERS;
     cycPer = cyc / (double)REC_PT_SZ;
     bench_xprintf("ascon-record-encrypt: %.3f cyc/rec (%.3f cyc/byte)\n", cyc, cycPer);
     bench_xprintf("REC_ENC_DONE\n");
 
     /* ---- per-record decrypt + failed-auth -> KeyUpdate decision ---- */
     bench_xprintf("REC_DEC_START\n");
-    t0 = bench_current_time(1);
     for (i = 0; i < REC_ITERS; i++) {
         wc_AsconAEAD128 a;
         build_nonce(i);
+        REC_START();
         wc_AsconAEAD128_Init(&a);
         wc_AsconAEAD128_SetKey(&a, trafficKey);
         wc_AsconAEAD128_SetNonce(&a, g_nonce);
@@ -77,25 +93,25 @@ void record_bench(void)
             dropCount++;
             if (dropCount > 1000) dropCount = 0; /* models forced-KeyUpdate */
         }
+        REC_END_ADD(decCyc);
     }
-    t1 = bench_current_time(0);
-    cyc = (t1 - t0) * 32000000.0 / (double)REC_ITERS;
+    cyc = (double)decCyc / (double)REC_ITERS;
     cycPer = cyc / (double)REC_PT_SZ;
     bench_xprintf("ascon-record-decrypt: %.3f cyc/rec (%.3f cyc/byte)\n", cyc, cycPer);
     bench_xprintf("REC_DEC_DONE\n");
 
     /* ---- per-record number mask (keyed-sponge, Option B) ---- */
     bench_xprintf("REC_MASK_START\n");
-    t0 = bench_current_time(1);
     for (i = 0; i < REC_MASK_ITERS; i++) {
         wc_AsconAEAD128 a;
         memset(ct, (byte)(i & 0xff), sizeof(ct));
+        REC_START();
         wc_AsconAEAD128_Init(&a);
         wc_AsconAEAD128_SetKey(&a, snKey);
         wc_AsconAEAD128_Mask(&a, ct, mask);
+        REC_END_ADD(maskCyc);
     }
-    t1 = bench_current_time(0);
-    cyc = (t1 - t0) * 32000000.0 / (double)REC_MASK_ITERS;
+    cyc = (double)maskCyc / (double)REC_MASK_ITERS;
     bench_xprintf("ascon-record-mask: %.3f cyc/rec\n", cyc);
     bench_xprintf("REC_MASK_DONE\n");
 

@@ -21,7 +21,7 @@ $defs = @(
     "-DNO_RSA",
     "-DNO_DH",
     "-DNO_PWDBASED",
-    "-DWOLFSSL_BENCHMARK_FIXED_UNITS_MB"
+    "-DWOLFSSL_BENCHMARK_FIXED_UNITS_MB", "-DWOLFSSL_ASCON_32BIT"
 )
 $incs = @(
     "-I$root",
