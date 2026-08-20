@@ -5,7 +5,14 @@
 To compare the **full DTLS-suite code footprint** (not just raw throughput), each
 cryptographic primitive a DTLS 1.3 node must link was compiled standalone for
 ARM Cortex-M and measured with `arm-none-eabi-size` (`.text` bytes, i.e. code
-size; data/bss were zero for all measured objects).
+  size; data/bss were zero for all measured objects).
+
+> **Evaluation methodology & caveat (R9).** The `.text` (code-size) figures below
+> are real: they are the actual sizes of the compiled objects reported by
+> `arm-none-eabi-size`. However, the *cycle/throughput* figures quoted from the
+> Renode run are **emulation-based estimates, not silicon measurements** (see
+> `renode-benchmark-results.md`). Neither benchmark measures physical-hardware
+> performance; a real-board measurement is open future work (**Q4**).
 
 - Toolchain: GNU Arm Embedded 10 2021.10 (`arm-none-eabi-gcc`, `arm-none-eabi-size`).
 - Flags (identical across all objects, for a fair comparison):

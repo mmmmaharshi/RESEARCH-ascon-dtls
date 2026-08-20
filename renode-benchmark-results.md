@@ -16,6 +16,17 @@ inside Renode 1.16.1 (`renode.exe` portable), using the bundled
 - Units: **MiB/s** = 1024² bytes/sec. Throughput is measured from CPU cycles
   (SysTick), so Renode's slower-than-real wall-clock is irrelevant.
 
+> **Evaluation methodology & caveat (R9).** Every throughput and per-record
+> cycle figure in this document is produced by **Renode**, an instruction-level
+> *emulator* of the Cortex-M0+/M3 — **not a silicon measurement**. Renode models
+> the CPU pipeline and counts executed instructions (SysTick), so the numbers are
+> *emulation-based feasibility and cycle estimates*. They are exact *within the
+> emulator's timing model* (deterministic, std = 0.000 across 10 runs) but do
+> **not** constitute measured performance on physical hardware; real-silicon
+> timing may differ. Treat them as an upper-bound feasibility check and cycle
+> estimate. A physical-hardware measurement (RP2040 / ESP32-C3) remains open
+> future work (**Q4**, design-01-record-layer.md:137).
+
 ## Results (MiB/s, higher = better; mean ± std over 10 Renode runs, std = 0.000)
 
 | Algorithm | Cortex-M0+ | Cortex-M3 | M3 / M0+ |
