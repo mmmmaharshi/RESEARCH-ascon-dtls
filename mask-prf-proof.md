@@ -182,11 +182,14 @@ libraries) or **CryptoVerif**:
 - **Lemma `dominance`:** for every `q`, `bound(mask) < bound(rfc_mask)` — establishes Thm 3.
 - **PQ variant:** EasyCrypt `pqeuclidean`/QROM for Thm 2.
 
-**Status:** no proof-assistant toolchain (opam / Coq / Why3 / EasyCrypt, or OCaml / CryptoVerif)
-is installed in the build environment used here; the machine-checked proof is **pending
-toolchain install**. The hand proof in §3–§6 is the contribution as submitted; the
-mechanized version is a defined follow-up (the lemmas above are exact specifications, not
-aspirations). *We do not claim the bound is machine-verified.*
+**Status:** toolchain install *in progress* — EasyCrypt is being built from source in WSL
+(`opam install easycrypt`, which compiles Coq + Why3 + EasyCrypt; see `/tmp/ec.log`). A
+runnable scaffold theory exists at `tools/easycrypt/mask_prf.ec` (modules `Mask`, oracles,
+and the four lemmas `mask_prf_conservative` / `mask_prf_tight` / `mask_prf_pq` /
+`mask_dominates_rfc`, each with the admitted game-hop plan from §3–§6). The hand proof in
+§3–§6 is the contribution as submitted; the machine-checked closure is a defined follow-up
+(the lemmas above are exact specifications, not aspirations). *We do not yet claim the bound
+is machine-verified.*
 
 ---
 
