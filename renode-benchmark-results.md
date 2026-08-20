@@ -27,6 +27,8 @@ inside Renode 1.16.1 (`renode.exe` portable), using the bundled
 > estimate. A physical-hardware measurement (RP2040 / ESP32-C3) remains open
 > future work (**Q4**, design-01-record-layer.md:137).
 
+> **Build configuration (M2).** Ascon is built in two configurations. The **32-bit-word** build (`-DWOLFSSL_ASCON_32BIT`, default) is **faster but larger** — it is the configuration used for all throughput and per-record cycle numbers unless marked `size-opt`. The **size-optimized (64-bit-word)** build (`-UWOLFSSL_ASCON_32BIT`) is **smaller but slower** — it is the configuration that yields the code-footprint win. Both configurations are now measured below; never mix a number from one build with a claim scoped to the other.
+
 ## Results (MiB/s, higher = better; mean ± std over 10 Renode runs, std = 0.000)
 
 | Algorithm | Cortex-M0+ | Cortex-M3 | M3 / M0+ |
@@ -41,6 +43,15 @@ inside Renode 1.16.1 (`renode.exe` portable), using the bundled
 All values are **mean ± std over 10 Renode runs per core**; std = 0.000 for every
 algorithm (Renode is a deterministic emulator — verified with `tools/bench_10x.ps1`).
 Throughput figures are therefore exact, not averaged.
+
+### ASCON-AEAD128 under both build configurations
+
+| Configuration | Cortex-M0+ (MiB/s) | Cortex-M3 (MiB/s) |
+|---|---:|---:|
+| 32-bit-word (default, faster) | 0.409 | 0.749 |
+| size-optimized 64-bit-word (smaller) | 0.338 | 0.585 |
+
+The size-opt build runs slower (more cycles per byte on 32-bit cores) but is the smaller-code configuration (≈1.25× smaller than ChaCha-Poly, see `footprint-benchmark.md`).
 
 (Algorithms whose 1-second run transfers < 1 MiB print `0 MiB` for the block
 count; the `MiB/s` column is the throughput and is the comparison metric.)
@@ -147,11 +158,13 @@ DTLS state machine pays on a constrained node — the missing empirical piece
   this microbenchmark and add a fixed per-record overhead on top of the numbers
   reported here.
 
-| Operation | Cortex-M0+ (cyc/rec) | Cortex-M3 (cyc/rec) | M0+ cyc/byte | M3 cyc/byte |
+| Operation | M0+ 32BIT (cyc/rec) | M3 32BIT (cyc/rec) | M0+ size-opt (cyc/rec) | M3 size-opt (cyc/rec) |
 |---|---:|---:|---:|---:|
-| ascon-record-encrypt | 3373.8 | 1862.4 | 105.4 | 58.2 |
-| ascon-record-decrypt | 3459.2 | 1925.1 | 108.1 | 60.2 |
-| ascon-record-mask | 1104.6 | 666.9 | — | — |
+| ascon-record-encrypt | 3373.8 | 1862.4 | 4042.88 | 2340.80 |
+| ascon-record-decrypt | 3459.2 | 1925.1 | 4128.32 | 2403.52 |
+| ascon-record-mask | 1104.6 | 666.9 | 1274.60 | 786.56 |
+
+cyc/byte — M0+ 32BIT 105.4 (enc) / 108.1 (dec); M3 32BIT 58.2 / 60.2; M0+ size-opt 126.34 / 129.01; M3 size-opt 73.15 / 75.11. The size-opt build costs ~20% more cycles per record (smaller code, larger cycle cost).
 
 \*All figures re-measured with a per-iteration SysTick accumulator (see
 `bench_record.c`): each record operation is timed individually and summed, so a
