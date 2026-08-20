@@ -118,8 +118,16 @@ bounds and non-claims below. (Detailed claim table: `M2-bounded-security-claim.m
    ≤ 2^-112. (Exercised end-to-end: see "Forced KeyUpdate result".)
 4. **Record-number mask (§4.2.1, Option B).** Mask = Ascon-P^12(
    domsep("RNDIMSK_") ‖ sn_key(128) ‖ ct[0..15](128) ), r=128, c=192.
-   It is a keyed-sponge PRF in `sn_key`, independent of the AEAD key, so
-   it adds no second input path into the AEAD security argument. Because
+    It is a keyed-sponge PRF in `sn_key`. `sn_key` is a distinct-label
+    `HKDF-Expand-Label` output of the *same* per-direction traffic secret that
+    yields the record AEAD key (labels `"sn"` vs `"key"`, RFC 9147 §4.2.3); under
+    the HKDF-PRF assumption (HMAC-Ascon-Hash256, Formal target 3) the two keys are
+    computationally independent — given the AEAD key, `sn_key` is indistinguishable
+    from random with advantage `≤ Adv^{PRF}_{HMAC-Ascon-Hash256}`. The mask PRF
+    bound therefore holds independently of the AEAD key (see design-01 §4.2.1); the
+    `"RNDIMSK_"` domain separator also isolates the mask's Ascon-P domain from the
+    AEAD. Because the mask leaks nothing about plaintext, it adds no second input
+    path into the AEAD security argument. Because
    it is ciphertext-dependent, wire sequence numbers are pseudorandom to
    an observer without `sn_key`; a fixed mask would leak the record count.
     PRF bound is q^2/2^192 + q/2^128 (negligible to q ≈ 2^96, far beyond the

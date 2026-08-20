@@ -125,9 +125,13 @@ No epoch bits are mixed into the nonce — exactly §4.2.
 
 The mask primitive is `wc_AsconAEAD128_Mask()` (`wolfssl/wolfcrypt/src/ascon.c:543`),
 wired into `Dtls13GetRnMask()` (`wolfssl/src/dtls13.c:273`) for
-`wolfssl_ascon_aead128`, with the sn_key provisioned per epoch by
-`Dtls13InitAsconCipher()` (`dtls13.c:2234`, key from
-`ssl->keys.client/server_sn_key`, derived at `dtls13.c:2177/2188`).
+  `wolfssl_ascon_aead128`, with the sn_key provisioned per epoch by
+  `Dtls13InitAsconCipher()` (`dtls13.c:2234`, key from
+  `ssl->keys.client/server_sn_key`, derived at `dtls13.c:2177/2188`). The derivation is
+  `client/server_sn_key = HKDF-Expand-Label(traffic_secret_N, "sn", "", 16)`
+  (RFC 9147 §4.2.3) — the same traffic secret that yields the record AEAD key/IV, so
+  `sn_key` and the AEAD key are sibling, label-separated KDF outputs (HKDF-PRF-
+  independent; design-01 §4.2.1).
 
 Construction (matches §4.2.1 "Option B"):
 
