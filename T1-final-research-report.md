@@ -36,8 +36,8 @@ The implementation uses:
 | First-two-packet reorder | PASS |
 | Cortex-M0 compile | PASS |
 | Cortex-M0 Ascon object size (size-opt 64-bit-word build) | 2,827 bytes |
-| Cortex-M0 cycle test | Run in Renode (Cortex-M0+ @32MHz): ASCON-AEAD128 0.409 MiB/s vs AES-128-GCM 0.071 MiB/s (~5.8× faster). See `renode-benchmark-results.md`. |
-| Cortex-M3 cycle test | Run in Renode (Cortex-M3 @32MHz): ASCON-AEAD128 0.749 MiB/s vs AES-128-GCM 0.166 MiB/s (~4.5× faster); ChaCha20-Poly1305 2.725 MiB/s (~16× faster than AES-GCM). See `renode-benchmark-results.md`. |
+| Cortex-M0 cycle test | Run in Renode (Cortex-M0+ @32MHz): ASCON-AEAD128 0.409 MiB/s vs AES-128-GCM 0.071 MiB/s (~5.8× faster; Renode emulation estimate, not silicon). See `renode-benchmark-results.md`. |
+| Cortex-M3 cycle test | Run in Renode (Cortex-M3 @32MHz): ASCON-AEAD128 0.749 MiB/s vs AES-128-GCM 0.166 MiB/s (~4.5× faster; Renode emulation estimate, not silicon); ChaCha20-Poly1305 2.725 MiB/s (~16× faster than AES-GCM; Renode emulation estimate, not silicon). See `renode-benchmark-results.md`. |
 | X.509 mode with peer verification enabled | PASS |
 | Forced KeyUpdate on failed authentication (RFC 9846 §4.7.3) | PASS |
 | Cortex-M0+/M3 per-record Ascon cost | encrypt 3374/1862 cyc, decrypt 3459/1925 cyc, mask 1105/667 cyc (32-byte record, @32 MHz, Renode). See `renode-benchmark-results.md`. |
@@ -297,7 +297,7 @@ AES-NI acceleration was compiled in.
 | 4096 | 322.041945 | 57.489149 | 363.727904 | 534.866341 | 242.879732 | 254.674532 |
 | 16384 | 288.538707 | 59.291529 | 305.457494 | 515.263209 | 236.871896 | 249.858161 |
 
-Ascon-AEAD was 3.8x to 5.6x faster than software AES-128-GCM across the
+Ascon-AEAD was 3.8x to 5.6x faster than software AES-128-GCM (Renode-emulated; not silicon) across the
 measured block sizes. It was about 1% slower than ChaCha20-Poly1305 at
 64-byte blocks and 14% faster at 128-byte blocks, then slower at 256 bytes
 and above. ChaCha20 alone was fastest, but it does not provide

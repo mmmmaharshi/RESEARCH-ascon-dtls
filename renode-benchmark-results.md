@@ -47,12 +47,12 @@ count; the `MiB/s` column is the throughput and is the comparison metric.)
 
 ## Key findings
 
-- **ASCON-AEAD128 is ~5.8× (M0+) / ~4.5× (M3) faster than AES-128-GCM** for
+- **ASCON-AEAD128 is ~5.8× (M0+) / ~4.5× (M3) faster than AES-128-GCM** (Renode-emulated estimate; not a silicon measurement) for
   authenticated encryption. This is the headline result for the constrained
   record-layer case: Ascon provides AEAD at a fraction of AES-GCM's cost.
-- **ChaCha20-Poly1305 is ~9.7× (M0+) / ~16.4× (M3) faster than AES-128-GCM.**
+- **ChaCha20-Poly1305 is ~9.7× (M0+) / ~16.4× (M3) faster than AES-128-GCM** (Renode-emulated estimate; not a silicon measurement).
   On these small cores, AES-GCM is by far the most expensive option.
-- **ASCON-AEAD is ~1.7× (M0+) / ~3.6× (M3) *slower* than ChaCha20-Poly1305 in
+- **ASCON-AEAD is ~1.7× (M0+) / ~3.6× (M3) *slower* than ChaCha20-Poly1305** (Renode-emulated estimate; not a silicon measurement) in
   raw throughput** (0.409 / 0.749 vs 0.691 / 2.725 MiB/s) on these cores.
   ASCON-AEAD delivers both confidentiality and authentication in one primitive,
   whereas ChaCha-Poly is a ChaCha20 + Poly1305 composition. (The DTLS transport
@@ -75,6 +75,14 @@ count; the `MiB/s` column is the throughput and is the comparison metric.)
 - 32 MHz software implementation — absolute MiB/s are not comparable to the
   desktop host numbers in `T1-final-research-report.md` (hundreds of MB/s on
   x86). Only the relative ordering and the M0+/M3 scaling are meaningful here.
+- **Renode timing-model fidelity (read this before citing any cycle/throughput
+  number).** Renode is an *instruction-count* model: it counts retired
+  instructions via SysTick and does **not** model cache, prefetch, branch
+  prediction, or interrupt latency. Absolute per-record cycles are therefore an
+  *upper bound* on a real Cortex-M and will be lower on silicon with a
+  cache/prefetch unit; the *relative ordering* (Ascon ≪ software AES-GCM;
+  ChaCha fastest) is the actionable, defensible takeaway. These are
+  feasibility/cycle estimates, not measured hardware performance.
 - AEAD throughput includes tag generation/verification; hash/HMAC rows are
   raw transforms for context.
 
@@ -168,7 +176,7 @@ bit-deterministic — verified with `tools/bench_10x.ps1`). Values are exact.
 - These are **software-only emulated (Renode) numbers, not silicon**. They
   bound the per-message CPU cost on a constrained node and confirm the
   Ascon record path is cheap relative to the AES-GCM record path on the same
-   cores (ASCON-AEAD was ~4.8× / ~3.5× faster than AES-128-GCM in the
+   cores (ASCON-AEAD was ~4.8× / ~3.5× faster than AES-128-GCM (Renode-emulated estimate; not a silicon measurement) in the
    throughput rows above). All AES-GCM figures here are **table-based software
    AES with no hardware accelerator**; mid-range MCUs with an AES engine
    (e.g., STM32 AES, SAM L11) would narrow or invert this gap, so the
