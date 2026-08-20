@@ -87,4 +87,4 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 "TLS_ASCONAEAD128_ASCONHASH256 provides DTLS 1.3 record security reducing to
 the SP 800-232 Ascon-AEAD128 bounds, with a new ciphertext-dependent
 record-number mask secure up to 2^96 records and HKDF on HMAC-Ascon-Hash256,
-together with the first constrained-device evaluation of Ascon-based TLS suites."
+together with, to our knowledge, the first constrained-device evaluation of Ascon-based TLS suites."
