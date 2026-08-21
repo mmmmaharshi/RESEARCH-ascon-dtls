@@ -1,0 +1,46 @@
+    1   0.000000    127.0.0.1 → 127.0.0.1    DTLSv1.3 461 Client Hello
+    2   0.005759    127.0.0.1 → 127.0.0.1    DTLSv1.3 172 Hello Retry Request
+    3   0.007018    127.0.0.1 → 127.0.0.1    DTLSv1.3 534 Client Hello
+    4   0.032399    127.0.0.1 → 127.0.0.1    DTLSv1.3 369 Server Hello
+    5   0.074578    127.0.0.1 → 127.0.0.1    DTLSv1.3 64 Encrypted Data
+    6   0.081614    127.0.0.1 → 127.0.0.1    DTLSv1.3 94 Encrypted Data
+    7   0.082648    127.0.0.1 → 127.0.0.1    DTLSv1.3 94 Encrypted Data
+    8   0.126750    127.0.0.1 → 127.0.0.1    DTLSv1.3 68 Encrypted Data
+    9   0.127216    127.0.0.1 → 127.0.0.1    DTLSv1.3 82 Encrypted Data
+   10   0.154300    127.0.0.1 → 127.0.0.1    DTLSv1.3 82 Encrypted Data
+   11   0.154704    127.0.0.1 → 127.0.0.1    DTLSv1.3 52 Encrypted Data
+   12   0.332011    127.0.0.1 → 127.0.0.1    DTLSv1.3 52 Encrypted Data
+
+        Version: DTLS 1.2 (0xfefd)
+            Handshake Type: Client Hello (1)
+            Version: DTLS 1.2 (0xfefd)
+            Cipher Suites Length: 2
+            Cipher Suites (1 suite)
+                Cipher Suite: Unknown (0x006e)
+                Supported Versions length: 2
+                Supported Version: DTLS 1.3 (0xfefc)
+        Version: DTLS 1.2 (0xfefd)
+            Handshake Type: Client Hello (1)
+            Version: DTLS 1.2 (0xfefd)
+            Cipher Suites Length: 2
+            Cipher Suites (1 suite)
+                Cipher Suite: Unknown (0x006e)
+                Supported Versions length: 2
+                Supported Version: DTLS 1.3 (0xfefc)
+
+PASS pkt 1: Handshake vfefd epoch=0 seq=0 msg=ClientHello len=408
+PASS pkt 2: Handshake vfefd epoch=0 seq=0 msg=ServerHello len=119
+PASS pkt 2: HelloRetryRequest magic random verified (RFC 8446 sec 4.1.3)
+PASS pkt 3: Handshake vfefd epoch=0 seq=1 msg=ClientHello len=481
+PASS pkt 4: Handshake vfefd epoch=0 seq=1 msg=ServerHello len=316
+PASS pkt 4: true ServerHello; subsequent records must be unified-header
+PASS pkt 5: unified header epoch~2 seq=16b len_field=True hdr=5 B encrypted_record=31 B
+PASS pkt 6: unified header epoch~2 seq=16b len_field=True hdr=5 B encrypted_record=61 B
+PASS pkt 7: unified header epoch~2 seq=16b len_field=True hdr=5 B encrypted_record=61 B
+PASS pkt 8: unified header epoch~3 seq=16b len_field=True hdr=5 B encrypted_record=35 B
+PASS pkt 9: unified header epoch~3 seq=16b len_field=True hdr=5 B encrypted_record=49 B
+PASS pkt 10: unified header epoch~3 seq=16b len_field=True hdr=5 B encrypted_record=49 B
+PASS pkt 11: unified header epoch~3 seq=16b len_field=True hdr=5 B encrypted_record=19 B
+PASS pkt 12: unified header epoch~3 seq=16b len_field=True hdr=5 B encrypted_record=19 B
+
+ALL CHECKS PASSED: 12 datagrams / 12 records conform to RFC 9147 section 4 wire rules

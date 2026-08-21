@@ -96,6 +96,65 @@ The failed-authentication → KeyUpdate mechanism (RFC 9846 §4.7.3, enforced at
 `2^-80`; the mechanism is therefore load-bearing for the bound, not
 incidental.
 
+## Mechanization status (honest)
+
+The **arithmetic core** of this game-hop is now machine-checked in
+`tools/coq/robust_channels.v` (Rocq/Coq; no `Admitted` — all goals closed).
+
+### What is machine-checked
+
+| Lemma / theorem | Statement | What it proves |
+|---|---|---|
+| `channel_bound` | `adv_channel ≤ q_R·B_1 + B_conf` | The hybrid sum (Hop 2) composed with Prop. 5.9 (Thms 7.1/7.2): the total channel advantage is bounded by the q_R-fold single-query integrity term plus the confidentiality term. Arithmetic of the composition is fully proven; the game-hops themselves are hypotheses. |
+| `concrete_enforced` | `adv_channel ≤ 2^36 + 2^16` (scaled) | The concrete enforced-`q_R=2^16` scenario: `≤ 2^-92 + 2^-112`. Plugs C1 (≤2^36, i.e. 2^-92) and C2 (≤1, i.e. 2^-128) with `q_R=2^16`. |
+| `concrete_max` | `adv_channel ≤ 2^36 + 2^48` (scaled) | The protocol-max `q_R=2^48` scenario: `≤ 2^-92 + 2^-80` (no enforced KeyUpdate). |
+| `keyupdate_loadbearing` | `2^16 < 2^48` | The forced-KeyUpdate mechanism is load-bearing: it binds `q_R` to `2^16` rather than `2^48`, a difference of `2^32` in the integrity term. |
+| `integrity_degradation` | `2^16·1 < 2^48·1` | Removing the mechanism weakens the integrity term from `2^-112` to `2^-80`. |
+| `mask_no_crossterm` | `adv_channel ≤ adv_intctxt_qR + adv_indcpa` (mask absent) | The mask's `adv_mask` does **not** appear in the channel bound — precondition (c) (disjoint key, Hop 1) holds, so the mask contributes no cross-term. |
+| `channel_security_enforced` | `adv_channel ≤ 2^36 + 2^16` (mask absent) | Summary: full enforced bound `≤ 2^-92 + 2^-112` with the mask contributing zero. |
+
+Re-run (WSL, as for `mask_prf.v`):
+
+```
+wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/tools/coq && coqc robust_channels.v'
+```
+
+### Scaling convention (identical to `mask_prf.v`)
+
+All advantages are natural numbers scaled by `2^128`:
+
+| quantity | real-valued bound | scaled (×2^128) |
+|---|---|---|
+| `Adv^{IND-CPA}_AEAD` (C1) | `≤ 2^-92` | `≤ 2^36` |
+| `Adv^{INT-CTXT}_AEAD(1)` (C2) | `≤ 2^-128` | `≤ 1` |
+| integrity term, `q_R=2^16` | `2^16·2^-128 = 2^-112` | `2^16·1 = 2^16` |
+| integrity term, `q_R=2^48` | `2^48·2^-128 = 2^-80` | `2^48·1 = 2^48` |
+
+### What remains a hand argument (stated as hypotheses in the Coq file)
+
+The three probability-theory steps are **assumptions**, not proven in the
+mechanization — exactly as `mask_prf.v` assumes `Hreducible` for the
+keyed-sponge reduction. Closing them in full would require an EasyCrypt /
+CryptoVerif game-hop mechanization (blocked by toolchain access; see
+`mask-prf-proof.md` §7.3):
+
+1. **`Hhybrid`** — the q_R-fold hybrid/telescoping sum:
+   `Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R · Adv^{INT-CTXT}_AEAD(1)`.
+   This is Hop 2's non-tight linear loss (the q_R factor FGJ20 identify).
+2. **`Hchannel`** — Proposition 5.9 + Thms 7.1/7.2 (FGJ20):
+   `Adv^{ROB-INT-IND-CCA} ≤ Adv^{INT-CTXT}(q_R) + Adv^{IND-CPA}`.
+   This is the generic DTLS 1.3 channel decomposition — *cited, not
+   re-derived* (per the scope of this file).
+3. **`Hconf` / `Hint1`** — the C1/C2 AEAD bounds (SP 800-232): `Adv^{IND-CPA} ≤ 2^-92`,
+   `Adv^{INT-CTXT}(1) ≤ 2^-128`. These are applied, not derived (non-claim).
+
+The **arithmetic that composes these into the final bound** — the hybrid
+sum feeding Prop. 5.9, plugging the concrete C1/C2 values, comparing the
+enforced vs. protocol-max scenarios, and confirming the mask's absence from
+the bound — is fully machine-checked. This is the same honest split as
+`mask_prf.v`: proven combinatorial/arithmetic core, stated hypotheses for
+the cryptographic-reduction steps.
+
 ## References
 
 - [FGJ20] Fischlin–Günther–Janson, "Robust Channels", ePrint 2020/718;
@@ -103,3 +162,5 @@ incidental.
   Thms 7.1 & 7.2 via Prop. 5.9, §7 DTLS 1.3 analysis.
 - NIST SP 800-232 (Ascon-AEAD128 bounds → C1/C2).
 - design-01-record-layer.md §4.2.1 (mask PRF, disjoint key).
+- `tools/coq/robust_channels.v` (arithmetic-core mechanization).
+- `tools/coq/mask_prf.v` (companion mask-PRF bound mechanization).

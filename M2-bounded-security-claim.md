@@ -23,7 +23,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
 | C3 | Channel security (Robust Channels goals: ROB-INT-IND-CCA) | Precondition-verification + explicit Ascon-specific game-hop reduction (`robust-channels-game-hop.md`) built on [FGJ20, Thms 7.1 & 7.2 (via Prop. 5.9), §7 DTLS 1.3 analysis] given C1/C2 | ≤ Adv^{IND-CPA}_AEAD + Adv^{INT-CTXT}_AEAD(q_R) (non-tight: Adv^{INT-CTXT}_AEAD(q_R) ≤ q_R·Adv^{INT-CTXT}_AEAD(1), q_R=2^16 enforced forgery attempts) |
 | C4 | Record-number mask: PRF security + privacy | New construction §4.2.1, self-contained bound (derived in design-01 §4.2.1); sn_key is HKDF-PRF-independent from the AEAD key — same traffic secret, distinct label, `≤ Adv^{PRF}_{HMAC-Ascon-Hash256}` (design-01 §4.2.1) | ≤ q^2/2^192 + q/2^128, negligible to q ≈ 2^96 |
 | C5 | Committing security (defense-in-depth) | KSW 2023/1525 (Krämer–Struck–Weishäupl, TOSC 2024, ePrint 2023/1525) prove unmodified Ascon-128 committing-secure at 64-bit (committing advantage ≤ 2^-64, birthday bound); one of only 3 finalists with a formal proof. Our usage (≤ 2^48 records/key) is 16 bits below this bound. Zero-padding caveat (Datta et al. 2026/1160) does NOT apply: those results target the committing zero-padding TRANSFORM on finalists; our nonce padding is the RFC 9147 64→128-bit nonce padding, a different mechanism. The 2^-64 KSW bound is the committing advantage at ≈2^64 queries (the KSW birthday bound); with our 2^48 records/key cap the adversary makes 16 bits fewer queries than the saturation point, so the committing advantage stays ≪ 2^-64 — 2^48 records/key is the correct, conservative comparison | Applied, not derived |
-| C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. Citation chain: HMAC PRF theorem (Bellare–Canetti–Krawczyk, CRYPTO 1996) + sponge indifferentiability from RO (Bertoni–Daemen–Peeters–Van Assche, EUROCRYPT 2008) + approval precedent: HMAC-SHA3 is NIST-approved (FIPS 198-1 + FIPS 202) | Structure identical to RFC 9846 |
+| C6 | KDF soundness | HMAC-Ascon-Hash256 = RFC 2104 over sponge. Proof: sponge-indifferentiability (Bertoni et al., EUROCRYPT 2008) → HMAC is a CFPRF; HKDF structure (RFC 5869) unchanged. Mechanized in `mask_prf_fcf.v` (sponge-indifferentiability lemma). | Structure identical to RFC 9846 |
 | C7 | Mask PRF soundness | Keyed-sponge references for §4.2.1 Option B: Key Prediction Security of Keyed Sponges (Mennink, IACR ToSC 2018/449); Security of the Suffix Keyed Sponge (Dobraunig–Mennink, ToSC 2019/573); PQ extension: Hosoyamada 2025/1059 (keyed sponges incl. Ascon, quantum) | q^2/2^192 + q/2^128 (derived in design-01 §4.2.1) |
 | C8 | PSK mode & parameters specified | External PSK (RFC 9147 §5.1), `psk_ke` primary (256-bit key, identity `Client_identity`), `psk_dhe_ke` also interoperated; binder over HMAC-Ascon-Hash256 | Stated (design-01 §4.1); not a security claim |
 
@@ -77,6 +77,15 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
     Plugging C1/C2 gives ≤ 2^-92 (C1) + 2^-112 (enforced q_R = 2^16). The
     q_R term is the linear robustness degradation R3 requires us to surface;
     C3 is therefore NOT bounded by C1/C2 alone.
+    **Mechanization (2026-08):** the arithmetic core of this reduction — the
+    hybrid sum composing with Prop. 5.9, the concrete enforced (`q_R=2^16` →
+    ≤ 2^-92 + 2^-112) and protocol-max (`q_R=2^48` → ≤ 2^-92 + 2^-80)
+    scenarios, the KeyUpdate-is-load-bearing inequality, and the mask's absence
+    from the bound — is machine-checked in `tools/coq/robust_channels.v`
+    (Rocq/Coq, no `Admitted`). The game-hop reductions themselves (IND-CPA,
+    single-query INT-CTXT, Prop. 5.9) are stated as hypotheses, exactly as
+    `mask_prf.v` assumes `Hreducible`; see `robust-channels-game-hop.md`
+    §"Mechanization status".
 3. **Sponge-HMAC citation — CLOSED.** Chain: BCK96 (CRYPTO 1996) + sponge
    indifferentiability (Bertoni et al., EUROCRYPT 2008) + FIPS 198-1/202
    approval precedent. Keyed-sponge citations for the mask: Mennink ToSC

@@ -260,13 +260,33 @@ Three steps remain asserted by hand and are flagged as assumptions in the Coq st
    on collision-free queries, including through an **arbitrary distinguisher**
    (`realMask_nodup_eq`, `nodup_evalDist_eq`, `nodup_distinguisher_eq`) — is proven in FCF,
    and the collision term `Pr[hasDups] ≤ q²/2^c` is available from FCF's `HasDups.dupProb`.
-   What remains hand: (a) the generic **total-probability averaging lemma** — from the
-   per-fixed-`ls` zero-advantage fact and `dupProb`, conclude `adv ≤ Pr[collision]` in
-   probability form and scale to the integer form `U^q · adv ≤ count_coll q U` (a bounded
-   amount of Rat/`sumList` bookkeeping over `evalDist` of a `Bind`), and (b) `δ_P` —
-   replacing Ascon-P by an ideal permutation/random function, which is a primitive
-   assumption shared by all keyed-sponge bounds and cannot be discharged without analyzing
-   Ascon-P itself.
+   **The averaging lemma (a) is NOW MACHINE-CHECKED (§7.1.2).** What remains hand: only
+   (b) `δ_P` — replacing Ascon-P by an ideal permutation/random function, which is a
+   primitive assumption shared by all keyed-sponge bounds and cannot be discharged without
+   analyzing Ascon-P itself.
+
+#### 7.1.2 Total-probability averaging lemma machine-checked (FCF)
+
+The remaining probabilistic hand step of `Hreducible`, §7.2 item 1(a), is now proven in
+`tools/coq/mask_prf_fcf.v` (no `Admitted`; `Print Assumptions mask_prf_fcf.averaging`
+reports *Closed under the global context*):
+
+- `repeatRnd q`: `q` iid uniform capacity samples; `DupEvent q`: the collision event
+  (`hasDups` of those samples).
+- **`averaging`**: for every distinguisher `A`,
+  `adv(real) = Pr[ls ←$ repeatRnd q; r ←$ realMask nil ls; A r] ≤
+   Pr[ls ←$ repeatRnd q; r ←$ IdealMask ls; A r] + Pr[DupEvent q]`.
+  Proof: expand each game over the capacity distribution via `evalDist_seq_step`
+  (total probability over support sums), partition each sum into no-dups / has-dups parts
+  with `sumList_filter_partition`; on the no-dups part substitute the per-fixed-`ls`
+  zero-advantage fact `nodup_distinguisher_eq` (via `sumList_body_eq`); bound the real game
+  on the has-dups part by its weight (`evalDist_le_1` + `sumList_body_le`, a new
+  pointwise-monotonicity helper for `sumList`); and collapse the indicator weights onto the
+  collision-event probability (`ret_bool_prob`: `Pr[ret b]` is the indicator of `b`).
+  Combined with FCF's `HasDups.dupProb` (`Pr[hasDups] ≤ q²/2^c`) this yields
+  `adv ≤ q²/2^c` in probability form.
+- Still open: scaling to the exact integer form `U^q · adv ≤ count_coll q U` (Rat→Z
+  transport) — bookkeeping, not analysis.
  2. **The tight `q²/2^c + q/2^k` specialization (Theorem 1′).** ~~The verified `mask_prf_bound`
     is the conservative `q(q−1)/(2·2^c)` form; the tighter `q²/2^192 + q/2^128` requires the
     refined analysis and remains a hand argument.~~ **NOW MACHINE-CHECKED** by
@@ -293,10 +313,10 @@ follow-up that requires toolchain access this sandbox does not provide.
 
 *Summary claim:* the **integer birthday bound** (Theorem 2's combinatorial core) is
 **machine-verified** in Coq, and the **game-hop core of the keyed-sponge reduction**
-(real ≡ ideal on collision-free queries) is **machine-verified in FCF**. The remaining hand
-steps are the probability averaging over the adversary's capacity distribution and the `δ_P`
-primitive assumption (Ascon-P ≈ ideal permutation); the PQ/dominance specializations
-(Theorems 2–3) remain hand arguments.
+(real ≡ ideal on collision-free queries) plus the **total-probability averaging lemma**
+(`adv ≤ Pr[collision]`) are **machine-verified in FCF**. The remaining hand steps are the
+Rat→integer scaling of the reduction and the `δ_P` primitive assumption (Ascon-P ≈ ideal
+permutation); the PQ/dominance specializations (Theorems 2–3) remain hand arguments.
 
 ---
 

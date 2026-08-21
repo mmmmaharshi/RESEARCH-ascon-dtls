@@ -711,6 +711,40 @@ covered by Direction 2. No alerts, no decryption failures, no HRR in either
 direction (the wolfSSL client offers group 0x0100 in CH1; `s_client`
 accepts the server's ffdhe2048 selection).
 
+### 11.3 Independent wire-format validation: Wireshark dissection + RFC 9147 conformance check
+
+Cross-stack DTLS 1.3 interop is out of scope (§11), so the "does a real peer
+parse the wire format?" question is answered with two independent non-wolfSSL
+validators over a live DTLS 1.3 / 0x006E handshake:
+
+1. **Wireshark 4.6.8 dissection.** A wolfSSL↔wolfSSL PSK handshake
+   (`tools/dtls13_psk_{server,client}.c`, suite 0x006E, `psk_ke`) was captured
+   to `tools/captures/dtls13-ascon.pcap` (loopback UDP relay
+   `tools/udp_relay_pcap.py`; Windows pktmon cannot see loopback and Npcap was
+   unavailable). Wireshark's independent DTLS dissector parses the capture as
+   **DTLSv1.3**: CH → HRR (cookie path) → CH2 → SH → encrypted records;
+   ClientHello carries exactly one cipher suite `0x006e` with supported_versions
+   `DTLS 1.3 (0xfefc)`. Evidence: `tools/captures/wireshark-rfc9147-evidence.txt`.
+
+2. **RFC 9147 structural conformance (`tools/rfc9147_wire_check.py`).** RFC 9147
+   publishes no normative handshake test vectors (unlike RFC 8448 for TLS 1.3),
+   so the checker asserts the §4 wire rules directly on every datagram in the
+   capture: legacy plaintext header layout (`legacy_record_version {254,253}`,
+   epoch/48-bit sequence/length), unified-header encoding `001 C S L E E`
+   (fixed bits, C=0 — no CIDs negotiated, 8/16-bit explicit sequence numbers,
+   length-field presence, low epoch bits tracking epochs 2→3 across the
+   handshake/key schedule), the §4.2.3 ≥16-byte ciphertext requirement for
+   record-number masking, the §5.2 handshake fragment header, and the HRR
+   detection via the fixed magic Random of TLS 1.3 §4.1.3. Result:
+   **12/12 datagrams pass**; crypto-layer correctness remains covered by the
+   KATs (`tools/ascon_kat.c`, `ascon_mask_kat.c`, `ascon_kdf_kat.c`) and the
+   picotls key-schedule cross-check (§11.0). Reproduce:
+   `python tools/rfc9147_wire_check.py tools/captures/dtls13-ascon.pcap`.
+
+**Result: VERIFIED.** The on-the-wire surface of the fork's DTLS 1.3 records is
+parsed without error by an independent dissector and conforms structurally to
+RFC 9147 §4; this complements, but does not replace, cross-stack interop.
+
 **Conclusion (R1+R2+R6+R7+R8).** The 0x006E record layer (a) is bit-exact with the
 standardized Ascon specification (R8), (b) rejects every tag-corrupted or replayed
 record end-to-end (R1), (c) actively rekeys under a sustained forgery flood (R2),

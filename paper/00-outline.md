@@ -20,6 +20,7 @@
 5. **4. Security analysis**
    - 4.1 Bounded-security claim (M2) + usage-limit accounting + forced KeyUpdate — src: `M2-bounded-security-claim.md`.
    - 4.2 Robust-channels game-hop (authentication / forgery / replay under bounded queries) — src: `robust-channels-game-hop.md`.
+     - 4.2a Arithmetic-core mechanization (Coq/Rocq: the hybrid sum + Prop. 5.9 composition + concrete enforced/protocol-max bounds + KeyUpdate load-bearing + mask no-cross-term; no `Admitted`; the probability-theory game-hops are stated hypotheses) — src: `tools/coq/robust_channels.v`, `robust-channels-game-hop.md` §"Mechanization status".
      - 4.3 Symbolic model (Tamarin: 8 lemmas — secrecy + sequence-number privacy under the PRF assumption; cryptographic soundness of the mask is §4.2.1 / `mask-prf-proof.md`, not verified by Tamarin) — src: `tools/tamarin/dtls13-ascon-record.spthy`, `tools/tamarin/README.md`, `design-01-record-layer.md` §129.
  6. **5. Implementation & Evaluation**  *(R9: explicitly frame all numbers as **emulation-based feasibility / cycle estimates**, NOT silicon measurements — see `renode-benchmark-results.md` / `footprint-benchmark.md` caveats. Real-hardware Q4 is future work.)*
     - 5.1 wolfSSL 0x006E DTLS 1.3 implementation (PSK + X.509) — src: `dtls13-ascon-validation.md` §11, `T1-final-research-report.md`.
