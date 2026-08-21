@@ -33,3 +33,5 @@ tools/coq/*.vos
 tools/coq/*.glob
 tools/coq/.lia.cache
 tools/coq/.mask_prf.aux
+
+tools/coq/.*.aux
