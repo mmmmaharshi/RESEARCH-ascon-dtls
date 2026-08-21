@@ -28,6 +28,24 @@
     - 5.3 Footprint (.text sizes real; cycle figures emulated) vs ChaCha20-Poly1305 / AES-GCM — src: `footprint-benchmark.md`.
     - 5.4 Self-checking vectors (KAT) — src: `tools/ascon_record_kat.txt`, `dtls13-ascon-validation.md` §4.2.1–4.2.2.
 7. **6. Related work** — DTLS 1.3; lightweight TLS (e.g., TLS 1.3 over OSCORE/EDHOC, tinyDTLS, Ascon-in-TLS drafts); prior Ascon-in-(D)TLS prototypes (PQCAIE 2024 — Ascon in the TLS record layer, no security analysis; Suleiman & Javeed 2025 — Ascon replaces DTLS) contrasted with this work's bounded-security argument; masked sequence numbers (past proposals).
+
+   **Related-work contrast table** (draft for §6; cells marked † = not present in
+   the cited paper per our reading — re-verify against the final PDFs before
+   submission):
+
+   | Axis | PQCAIE 2024 (Mansoor et al., *Internet of Things* 27:101228) | Suleiman & Javeed 2025 (Ascon-over-CoAP vs DTLS, Springer IMS) | **This work** |
+   |---|---|---|---|
+   | **Cross-stack interop** | None reported† — single-stack performance/security comparison of PQC authentication schemes over TLS 1.3 | None by design — Ascon is applied at the CoAP application layer and *compared against* DTLS, not integrated into it; no peer interoperates | wolfSSL↔OpenSSL 3.6.3 (patched) and wolfSSL↔picotls over TLS 1.3 (AEAD + key schedule, PSK `psk_ke`/`psk_dhe_ke`, X.509 both directions); DTLS 1.3 wolfSSL↔wolfSSL plus independent Wireshark dissection and RFC 9147 §4 conformance check on captured wire bytes |
+   | **Security argument** | Empirical only (performance + qualitative security discussion); no reduction or bound† | Empirical attack-resistance observations (MITM/replay scenarios) + latency/energy results; no proof† | Bounded-security claim (M2) reducing record security to Ascon-AEAD128/Hash256 assumptions with concrete AEAD usage limits; standalone tight mask-PRF proof of the record-number mask incl. dominance over the RFC 9147 AES-ECB mask |
+   | **Formal model** | None† | None† | Tamarin symbolic model (8 lemmas: secrecy + sequence-number privacy under a symbolic PRF assumption); Coq/Rocq mechanization of the mask-PRF hybrid sum and robust-channels bounds (`tools/coq/`), EasyCrypt scaffold |
+   | **Embedded eval** | IoT e-health context, but no constrained-device benchmark reported† | Yes — Orange Pi Zero 2 W SBC testbed: handshake latency (−65% vs DTLS) and energy (−12.2%) | Cortex-M0+/M3 via Renode emulation: per-record cycle costs and .text footprint vs ChaCha20-Poly1305 / AES-GCM (explicitly framed as emulation-based feasibility numbers; silicon is future work) |
+
+   Gap in one glance: prior Ascon-in-(D)TLS-adjacent prototypes are either
+   application-layer substitutions (Suleiman & Javeed) or PQC-authentication
+   comparisons (PQCAIE) with empirical evaluation only; none integrates Ascon as
+   an RFC 9147 record-protection suite inside a mainstream TLS library, none
+   interoperates across stacks at the protocol surface, and none carries a
+   security argument beyond benchmarking.
 8. **7. Conclusion + future work** (real-hardware Q4: RP2040 vs ESP32-C3; ARM-optimized Ascon permutation).
 9. **Appendix** — full record AEAD test vectors.
 
