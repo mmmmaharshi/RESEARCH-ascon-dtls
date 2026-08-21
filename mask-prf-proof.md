@@ -213,15 +213,49 @@ the EasyCrypt/CryptoVerif fetches are not (see §7.2). The model is the **ideal 
 `count_coll q U` counts collision pairs over a uniform universe of `U` capacity-states, which
 is exactly the `coll_prob` term in Theorem 2.
 
+#### 7.1.1 Game-hop core machine-checked (FCF)
+
+The **hybrid/game-hop step** of the keyed-sponge reduction is now machine-verified in
+`tools/coq/mask_prf_fcf.v` using the **FCF** (Formally Correct Foundations) Coq framework
+(built from source at `/root/fcf-master`, `make` exit 0 under Rocq 9.1.1; no `Admitted`):
+
+- `realMask_nodup_eq ls f : NoDup ls → (∀ d', in_keys d' f = true → ¬In d' ls) →
+   comp_spec eq (realMask f ls) (IdealMask ls)`.
+  Models the mask oracle as a **consistent random function** over capacity queries
+  (`realMask`: fresh uniform sample per unseen capacity, memoized repeat) and the ideal
+  oracle as **independent uniforms** (`IdealMask`). Proven by induction on the query list
+  with FCF's coupling logic (`comp_spec_seq` via a dummy-free `spec_seq` wrapper,
+  `comp_spec_ret`, `rnd_refl`). This is exactly the content of the hybrid argument:
+  *conditioned on no two queries colliding on a capacity, the real and ideal oracles are
+  identically distributed.*
+- `nodup_evalDist_eq : ... → ∀ x, evalDist (realMask f ls) x == evalDist (IdealMask ls) x`.
+  Probability form of the same fact: any distinguisher has advantage **exactly 0** on the
+  collision-free event.
+
+Re-run:
+
+```
+wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/tools/coq && coqc -R /root/fcf-master/src "" mask_prf_fcf.v'
+```
+
+(FCF must be present at `/root/fcf-master`; rebuild with
+`curl -sL https://codeload.github.com/AdamPetcher/FCF/tar.gz/refs/heads/master | tar xz -C /root`
+then `make -j2` in `/root/fcf-master`.)
+
 ### 7.2 Not machine-checked (hand arguments / assumptions)
 
 Three steps remain asserted by hand and are flagged as assumptions in the Coq statement:
 
 1. **The keyed-sponge reduction** `Hreducible : ∀ q U, U^q · adv ≤ count_coll q U`.
    This is the standard ideal-permutation modeling fact (the mask advantage is at most the
-   collision probability) from §4.2.1; it is the analytic core of the keyed-sponge bound and
-   is *assumed*, not proven, in `mask_prf_bound`. Closing it would require a keyed-sponge
-   security game-hop — the original EasyCrypt/CryptoVerif plan (below).
+   collision probability) from §4.2.1; it is the analytic core of the keyed-sponge bound.
+   **Partially machine-checked now (§7.1.1):** the game-hop core — real ≡ ideal conditioned
+   on collision-free queries, hence distinguisher advantage 0 on that event — is proven in
+   FCF (`realMask_nodup_eq`, `nodup_evalDist_eq`). What remains hand: (a) averaging the
+   no-collision equivalence over the adversary's capacity distribution to obtain
+   `adv ≤ Pr[collision]` in probability form, and (b) `δ_P` — replacing Ascon-P by an ideal
+   permutation/random function, which is a primitive assumption shared by all keyed-sponge
+   bounds and cannot be discharged without analyzing Ascon-P itself.
  2. **The tight `q²/2^c + q/2^k` specialization (Theorem 1′).** ~~The verified `mask_prf_bound`
     is the conservative `q(q−1)/(2·2^c)` form; the tighter `q²/2^192 + q/2^128` requires the
     refined analysis and remains a hand argument.~~ **NOW MACHINE-CHECKED** by
@@ -247,8 +281,11 @@ compile against a standard EasyCrypt install elsewhere; closing the hops is a de
 follow-up that requires toolchain access this sandbox does not provide.
 
 *Summary claim:* the **integer birthday bound** (Theorem 2's combinatorial core) is
-**machine-verified** in Coq. The keyed-sponge reduction (1) and the tight/PQ/dominance
-specializations are **hand arguments** and are not claimed machine-verified.
+**machine-verified** in Coq, and the **game-hop core of the keyed-sponge reduction**
+(real ≡ ideal on collision-free queries) is **machine-verified in FCF**. The remaining hand
+steps are the probability averaging over the adversary's capacity distribution and the `δ_P`
+primitive assumption (Ascon-P ≈ ideal permutation); the PQ/dominance specializations
+(Theorems 2–3) remain hand arguments.
 
 ---
 
