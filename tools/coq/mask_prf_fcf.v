@@ -67,6 +67,22 @@ Section MaskPRF.
     + intros a b _ _ Hab; subst; apply H2.
   Qed.
 
+  (* Same, for boolean-valued continuations (distinguishers). *)
+  Lemma spec_seq_bool : forall (A : Set) (eqda : EqDec A)
+    (P : bool -> bool -> Prop)
+    (c1 c2 : Comp A) (f1 f2 : A -> Comp bool),
+    comp_spec eq c1 c2 ->
+    (forall x, comp_spec P (f1 x) (f2 x)) ->
+    comp_spec P (Bind c1 f1) (Bind c2 f2).
+  Proof.
+    intros A eqda P c1 c2 f1 f2 H1 H2.
+    eapply comp_spec_seq.
+    + exact true.
+    + exact true.
+    + exact H1.
+    + intros a b _ _ Hab; subst; apply H2.
+  Qed.
+
   Lemma rnd_refl : comp_spec (fun (x y : R) => x = y) (Rnd k) (Rnd k).
   Proof.
     apply eq_impl_comp_spec_eq.
@@ -119,6 +135,26 @@ Section MaskPRF.
     apply (comp_spec_eq_impl_eq (eqd1 := list_EqDec (Bvector_EqDec k))
                                 (eqd2 := list_EqDec (Bvector_EqDec k))).
     apply realMask_nodup_eq; assumption.
+  Qed.
+
+  (* Distinguisher lift: any boolean post-processing A of the outputs also has
+     identical distributions on collision-free queries.  This is the per-fixed-ls
+     instance of "advantage is 0 on the no-collision event" used by the hybrid
+     argument; combined with FCF's HasDups.dupProb (Pr[hasDups] <= q^2/2^c) and a
+     generic total-probability/averaging lemma, it yields adv <= Pr[collision]. *)
+  Lemma nodup_distinguisher_eq :
+    forall (ls : list D) (f : list DR),
+      (forall d', in_keys d' f = true -> ~ In d' ls) ->
+      NoDup ls ->
+      forall (A : list R -> Comp bool),
+        evalDist (r <-$ realMask f ls; A r) true ==
+        evalDist (r <-$ IdealMask ls; A r) true.
+  Proof.
+    intros ls f Hdis Hnd A.
+    eapply comp_spec_eq_impl_eq.
+    eapply spec_seq_bool.
+    - apply realMask_nodup_eq; assumption.
+    - intros x. apply eq_impl_comp_spec_eq. intros; reflexivity.
   Qed.
 
 End MaskPRF.

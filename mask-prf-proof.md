@@ -231,6 +231,13 @@ The **hybrid/game-hop step** of the keyed-sponge reduction is now machine-verifi
 - `nodup_evalDist_eq : ... → ∀ x, evalDist (realMask f ls) x == evalDist (IdealMask ls) x`.
   Probability form of the same fact: any distinguisher has advantage **exactly 0** on the
   collision-free event.
+- `nodup_distinguisher_eq : ... → ∀ (A : list R → Comp bool),
+    evalDist (r ←$ realMask f ls; A r) true == evalDist (r ←$ IdealMask ls; A r) true`.
+  **Distinguisher lift**: arbitrary boolean post-processing of the outputs also has
+  identical distributions on collision-free queries — the per-fixed-`ls` instance of
+  "advantage is 0 on the no-collision event" that feeds the hybrid argument.
+- The **collision term** is available off-the-shelf from FCF: `HasDups.dupProb` gives
+  `Pr[hasDups of q uniform samples] ≤ q²/2^c` for capacities drawn iid-uniform.
 
 Re-run:
 
@@ -250,12 +257,16 @@ Three steps remain asserted by hand and are flagged as assumptions in the Coq st
    This is the standard ideal-permutation modeling fact (the mask advantage is at most the
    collision probability) from §4.2.1; it is the analytic core of the keyed-sponge bound.
    **Partially machine-checked now (§7.1.1):** the game-hop core — real ≡ ideal conditioned
-   on collision-free queries, hence distinguisher advantage 0 on that event — is proven in
-   FCF (`realMask_nodup_eq`, `nodup_evalDist_eq`). What remains hand: (a) averaging the
-   no-collision equivalence over the adversary's capacity distribution to obtain
-   `adv ≤ Pr[collision]` in probability form, and (b) `δ_P` — replacing Ascon-P by an ideal
-   permutation/random function, which is a primitive assumption shared by all keyed-sponge
-   bounds and cannot be discharged without analyzing Ascon-P itself.
+   on collision-free queries, including through an **arbitrary distinguisher**
+   (`realMask_nodup_eq`, `nodup_evalDist_eq`, `nodup_distinguisher_eq`) — is proven in FCF,
+   and the collision term `Pr[hasDups] ≤ q²/2^c` is available from FCF's `HasDups.dupProb`.
+   What remains hand: (a) the generic **total-probability averaging lemma** — from the
+   per-fixed-`ls` zero-advantage fact and `dupProb`, conclude `adv ≤ Pr[collision]` in
+   probability form and scale to the integer form `U^q · adv ≤ count_coll q U` (a bounded
+   amount of Rat/`sumList` bookkeeping over `evalDist` of a `Bind`), and (b) `δ_P` —
+   replacing Ascon-P by an ideal permutation/random function, which is a primitive
+   assumption shared by all keyed-sponge bounds and cannot be discharged without analyzing
+   Ascon-P itself.
  2. **The tight `q²/2^c + q/2^k` specialization (Theorem 1′).** ~~The verified `mask_prf_bound`
     is the conservative `q(q−1)/(2·2^c)` form; the tighter `q²/2^192 + q/2^128` requires the
     refined analysis and remains a hand argument.~~ **NOW MACHINE-CHECKED** by
