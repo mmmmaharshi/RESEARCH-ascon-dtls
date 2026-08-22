@@ -73,7 +73,9 @@ $gccArgs = @(
     "--specs=nano.specs", "--specs=nosys.specs",
     "-o", "$PSScriptRoot\out\bench-$Core$suffix.elf"
 )
+$oldPref = $ErrorActionPreference; $ErrorActionPreference = "Continue"
 & $gcc @gccArgs 2> "$PSScriptRoot\out\bench-$Core.build.log"
+$ErrorActionPreference = $oldPref
 $buildLog = Get-Content "$PSScriptRoot\out\bench-$Core.build.log" -Raw
 if ($LASTEXITCODE -ne 0) {
     Write-Output $buildLog

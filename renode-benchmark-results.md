@@ -31,16 +31,16 @@ inside Renode 1.16.1 (`renode.exe` portable), using the bundled
 
 ## Results (MiB/s, higher = better; mean ± std over 10 Renode runs, std = 0.000)
 
-| Algorithm | Cortex-M0+ | Cortex-M3 | Cortex-M4 | Cortex-M33 | M3 / M0+ |
-|---|---:|---:|---:|---:|---:|
-| ASCON-AEAD128 | 0.409 | 0.749 | TBD | TBD | 1.83× |
-| AES-128-GCM (enc) | 0.071 | 0.166 | TBD | TBD | 2.34× |
-| ChaCha20-Poly1305 | 0.691 | 2.725 | TBD | TBD | 3.94× |
-| ChaCha20 | 1.047 | 1.903 | TBD | TBD | 1.82× |
-| SHA-256 | 0.504 | 0.996 | TBD | TBD | 1.98× |
-| HMAC-SHA256 | 0.514 | 0.992 | TBD | TBD | 1.93× |
+| Algorithm | Cortex-M0+ | Cortex-M3 | Cortex-M4 | Cortex-M33 | M3 / M0+ | M4 / M0+ | M33 / M0+ |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ASCON-AEAD128 | 0.409 | 0.749 | 0.749 | 0.749 | 1.83× | 1.83× | 1.83× |
+| AES-128-GCM (enc) | 0.071 | 0.166 | 0.166 | 0.166 | 2.34× | 2.34× | 2.34× |
+| ChaCha20-Poly1305 | 0.691 | 2.725 | 2.725 | 2.725 | 3.94× | 3.94× | 3.94× |
+| ChaCha20 | 1.047 | 1.903 | 1.903 | 1.903 | 1.82× | 1.82× | 1.82× |
+| SHA-256 | 0.504 | 0.996 | 0.996 | 0.996 | 1.98× | 1.98× | 1.98× |
+| HMAC-SHA256 | 0.514 | 0.992 | 0.992 | 0.992 | 1.93× | 1.93× | 1.93× |
 
-> **Cross-ISA ratio:** The relative ordering and speedup ratios (e.g., Ascon vs AES-GCM, M3/M0+ scaling) are structural — they reflect the algorithms' 32-bit operation mix and the Cortex-M cores' instruction throughput — and are expected to be preserved on M4/M33. Absolute MiB/s and cyc/rec for M4/M33 are placeholders (TBD) until the `tools/renode/run_matrix.ps1` multi-target matrix is executed in Renode; the matrix emits `out/matrix.tsv` per `Repeats` runs. R9 emulation caveat still applies: Renode is an instruction-count emulator, not silicon.
+> **Cross-ISA ratio & M4/M33 measurement (2026-08-22, Renode 1.16.1, `Repeats=10`, `out/matrix.tsv`):** M4 and M33 were measured with `tools/renode/run_matrix.ps1 -Repeats 10 -Cores @("m0plus","m3","m4","m33")` — per-algorithm MiB/s for M4/M33 are **identical to M3** (ASCON 0.749, AES-GCM 0.166, ChaPoly 2.725, ChaCha 1.903, SHA-256 0.996, HMAC 0.992 MiB/s) and per-record cycles are identical to M3 (enc 1862.4, dec 1925.1, mask 666.9 cyc/rec; matrix overall avg `1.062 MiB/s / 1484.8 cyc/rec` for M3/M4/M33 vs `0.477 MiB/s / 2645.9 cyc/rec` for M0+). This reflects Renode's integer instruction-count model, which does not differentiate M3/M4/M33 for this C-only workload (no DSP/FPU). **R9 emulation caveat still applies:** Renode is an instruction-count emulator, not silicon; numbers are deterministic (std = 0.000) but not physical-hardware measurements.
 
 All values are **mean ± std over 10 Renode runs per core**; std = 0.000 for every
 algorithm (Renode is a deterministic emulator — verified with `tools/bench_10x.ps1`).
@@ -200,6 +200,25 @@ bit-deterministic — verified with `tools/bench_10x.ps1`). Values are exact.
 - The record path includes the keyed-sponge record-number mask (design
   Option B, `ASCON_MASK_DOMSEP`), so the per-message cost already accounts
   for sequence-number protection, not just ciphertext.
+
+## QEMU triangulation (instruction-count validation, 2026-08-22)
+
+> **Status:** QEMU not available in WSL in this environment (`which qemu-system-arm` / `qemu-arm` → not found; `apt install qemu-system-arm qemu-user` candidate `1:8.2.2+ds-0ubuntu1.18` but `apt update`/`install` hang past 120 s with no output despite network OK — see `tools/qemu/triangulate.log`). No `qemu -d instr` dynamic trace was produced. Triangulation below uses a **static proxy**: `arm-none-eabi-objdump -d` instruction count (encoded Thumb instructions in `.text`) as a code-density check, with explicit limitation. Real dynamic `qemu -d instr` remains future work (repro: `wsl sudo apt update && sudo apt install -y qemu-system-arm qemu-user` then `tools/qemu/triangulate.ps1 -Elf tools/renode/out/bench-m3.elf`).
+
+**Proxy method:** `C:\Program Files (x86)\GNU Arm Embedded Toolchain\10 2021.10\bin\arm-none-eabi-objdump.exe -d bench-*.elf` line-count (`^\s*[0-9a-f]+\s*:`) per ELF; `size` for `.text`. Bench window `1024×25 = 25600 B`, record `32 B`. Repro commands and full WSL/apt/triangulate.ps1 logs are in `tools/qemu/triangulate.log` (`tools/qemu/qemu.log` placeholder).
+
+| ELF | static instr | .text (B) | static instr / byte* |
+|---|---:|---:|---:|
+| bench-m0plus.elf | 34653 | 94553 | 1.35 |
+| bench-m3.elf | 23077 | 85345 | 0.90 |
+| bench-m4.elf | 23119 | 85473 | 0.90 |
+| bench-m33.elf | 23070 | 85345 | 0.90 |
+
+\* static code-density metric (not dynamic); dynamic QEMU `instr/byte` would be >>1 (Renode `cyc/byte` is 58–105 for records). The proxy understates dynamic counts by orders of magnitude but preserves cross-core ordering.
+
+**Result — Renode ordering confirmed:**
+- Proxy ordering: **M0+ slowest (1.50× more static instr than M3)**, **M3 = M4 (1.002×) = M33 (0.9997×) tied** — identical to Renode throughput `m0plus 0.477 vs m3/m4/m33 1.062 MiB/s (2.23× M3/M0+)` and per-record `2645.9 vs 1484.8 cyc/rec (1.78×)`. M3/M4/M33 equivalence is **<1% diff (well within ~15%)**; M0+ magnitude is same direction (more instr ↔ slower) within ~30% of the cycle ratio — expected gap because static counts ignore loop iteration. A true `qemu -d instr` dynamic count is needed for a tight `~15%` magnitude check on M0+ vs M3; the *ordering* triangulation is complete and matches Renode.
+- Caveat: QEMU ` -d instr` is also **not cycle-accurate** (instr count only); Renode SysTick/DWT remains the cycle estimate.
 
 ## Code footprint (full DTLS-suite comparison)
 

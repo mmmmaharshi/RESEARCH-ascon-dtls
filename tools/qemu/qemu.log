@@ -1,0 +1,11 @@
+# qemu.log — placeholder (QEMU not installed, proxy used)
+# See triangulate.log for full details and reproduction commands.
+# Date: 2026-08-22
+# Intended command (system-mode, per core):
+#   wsl qemu-system-arm -M mps2-an385 -nographic -kernel tools/renode/out/bench-m3.elf -d instr -D tools/qemu/qemu.log -semihosting
+#   or via PowerShell: .\tools\qemu\triangulate.ps1 -Elf tools/renode/out/bench-m3.elf -QemuLog tools/qemu/qemu.log
+# Repro when QEMU available: wsl sudo apt update && sudo apt install -y qemu-system-arm qemu-user
+# Status: QEMU not available in WSL (which qemu-system-arm -> not found, apt install TIMEOUT), so no dynamic -d instr trace was produced.
+# Proxy instr counts (static, arm-none-eabi-objdump -d) are in triangulate.log:
+#   bench-m0plus 34653, bench-m3 23077, bench-m4 23119, bench-m33 23070 static instr
+#   ordering: M0+ > M3 ~= M4 ~= M33, matching Renode 0.477 vs 1.062 MiB/s (M0+ slowest, M3/M4/M33 tied)

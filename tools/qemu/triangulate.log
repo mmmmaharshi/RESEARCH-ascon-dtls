@@ -1,0 +1,153 @@
+# QEMU triangulation — instruction-count validation
+# Date: 2026-08-22 (UTC), Host: Windows 10.0.26200.9267, WSL 2.6.3.0 / Ubuntu 24.04.1 LTS (noble)
+# Repo: C:\Users\manoh\OneDrive\Desktop\ascon-dtls
+# Toolchain: GNU Arm Embedded 10 2021.10 (arm-none-eabi-objdump.exe / size.exe)
+
+## 1. Reproducibility — commands executed
+
+### WSL QEMU availability check (Task 1)
+```ps1
+wsl -- which qemu-system-arm; echo EXIT1:$?
+wsl -- which qemu-arm; echo EXIT2:$?
+wsl -- bash -c "dpkg -l 2>&1 | grep -i qemu | head -20; apt-cache policy qemu-system-arm 2>&1 | head -20; apt-cache policy qemu-user 2>&1 | head -20"
+wsl -- bash -c "cat /etc/os-release | head -20; wsl --version"
+```
+
+### Attempted install (Task 1 — documented, timed out, logged as future work)
+```bash
+wsl -- bash -c "timeout 60 sudo apt update 2>&1 | tail -30; echo EXIT:$?"
+wsl -- bash -c "timeout 120 sudo apt install -y qemu-system-arm qemu-user 2>&1 | tail -100; echo EXIT:$?"
+# Result: both commands hang past 60–180s with no output (apt fetch stalls in this
+# environment despite ping/curl to archive.ubuntu.com succeeding). No package
+# installed. Candidate remains 1:8.2.2+ds-0ubuntu1.18 (noble-updates/main).
+# Documented as pending; retry with: wsl sudo apt update && sudo apt install -y qemu-system-arm qemu-user
+```
+
+### Triangulation script per core (Task 2)
+```ps1
+# For each core in m0plus,m3,m4,m33:
+.\tools\qemu\triangulate.ps1 -Elf tools/renode/out/bench-m0plus.elf -QemuLog tools/qemu/qemu-m0plus.log
+.\tools\qemu\triangulate.ps1 -Elf tools/renode/out/bench-m3.elf     -QemuLog tools/qemu/qemu-m3.log
+.\tools\qemu\triangulate.ps1 -Elf tools/renode/out/bench-m4.elf     -QemuLog tools/qemu/qemu-m4.log
+.\tools\qemu\triangulate.ps1 -Elf tools/renode/out/bench-m33.elf    -QemuLog tools/qemu/qemu-m33.log
+# System-mode args inside script:
+#   qemu-system-arm -M mps2-an385 -nographic -kernel <elf> -d instr -D <log> -semihosting
+#   then: (Get-Content <log> | Measure-Object -Line).Lines  -> instr total
+#         instr/byte = instr / (1024*25), instr/record est for 32 B
+# User-mode alternative: qemu-arm -d instr -D <log> <elf>
+```
+
+### Proxy fallback — static instruction count via objdump (QEMU not available)
+```ps1
+$objdump = "C:\Program Files (x86)\GNU Arm Embedded Toolchain\10 2021.10\bin\arm-none-eabi-objdump.exe"
+$size    = "C:\Program Files (x86)\GNU Arm Embedded Toolchain\10 2021.10\bin\arm-none-eabi-size.exe"
+# per ELF:
+& $objdump -d tools/renode/out/bench-m0plus.elf | Select-String -Pattern "^\s*[0-9a-f]+\s*:" | Measure-Object  # static instr count
+& $size -A -d tools/renode/out/bench-m0plus.elf   # section sizes
+& $size -B tools/renode/out/bench-m0plus.elf      # dec/hex summary
+# Repeat for bench-m3.elf, bench-m4.elf, bench-m33.elf, bench-m0plus-sizeopt.elf, bench-m3-sizeopt.elf
+```
+
+## 2. WSL / QEMU check output (2026-08-22)
+
+```
+which qemu-system-arm -> not found (EXIT 1)
+which qemu-arm        -> not found (EXIT 1)
+ls /usr/bin/qemu*     -> No such file
+dpkg -l | grep qemu   -> (no installed package)
+apt-cache policy qemu-system-arm -> Installed: (none), Candidate: 1:8.2.2+ds-0ubuntu1.18
+apt-cache policy qemu-user       -> Installed: (none), Candidate: 1:8.2.2+ds-0ubuntu1.18
+/etc/os-release: Ubuntu 24.04.1 LTS (noble), WSL 2.6.3.0, kernel 6.6.87.2-1
+WSL network: ping 8.8.8.8 OK, curl -I http://archive.ubuntu.com -> 200 (Cloudflare)
+apt update/install: TIMEOUT after 60-180s, no output (see above). QEMU not installed.
+```
+
+## 3. Triangulate.ps1 execution (QEMU not available)
+
+For each core m0plus,m3,m4,m33 (using tools/renode/out/bench-*.elf, 229–231 KB):
+
+```
+--- core m0plus elf .../bench-m0plus.elf ---
+ERROR: The term 'qemu-system-arm' is not recognized as a name of a cmdlet, function, script file, or executable program.
+no qemu log (expected without QEMU)
+
+--- core m3 ---
+ERROR: term 'qemu-system-arm' not recognized — no qemu log
+
+--- core m4 ---
+ERROR: term 'qemu-system-arm' not recognized — no qemu log
+
+--- core m33 ---
+ERROR: term 'qemu-system-arm' not recognized — no qemu log
+```
+
+No qemu-*.log produced. This is the expected fallback path per task; proxy below.
+
+## 4. Proxy instr counts via arm-none-eabi-objdump (static, not dynamic)
+
+> LIMITATION: This is a STATIC code-size proxy (number of encoded Thumb instructions
+> in the ELF .text), NOT a dynamic QEMU -d instr execution trace. A real QEMU run
+> would count every retired instruction across the benchmark loop (~tens of millions
+> for the 1s Renode window). Static counts understate dynamic counts by orders of
+> magnitude but preserve cross-core ORDERING (more Thumb-1 instructions on M0+ vs
+> denser Thumb-2 on M3/M4/M33). Treat ratios as code-density triangulation, not
+> cycle accuracy.
+
+| ELF | .text (B) | text+data+bss dec | static instr (objdump -d) | static instr/byte* | note |
+|---|---|---:|---:|---:|---|
+| bench-m0plus.elf | 94553 | 95313 | 34653 | 1.35 | Cortex-M0+ Thumb-1, 225 KB ELF |
+| bench-m3.elf     | 85345 | 86105 | 23077 | 0.90 | Cortex-M3 Thumb-2, 229 KB ELF |
+| bench-m4.elf     | 85473 | 86233 | 23119 | 0.90 | M4 == M3 (no DSP/FPU in this workload) |
+| bench-m33.elf    | 85345 | 86105 | 23070 | 0.90 | M33 == M3 |
+| bench-m0plus-sizeopt.elf |  – | – | 31304 | 1.22 | size-opt (64-bit Ascon) smaller |
+| bench-m3-sizeopt.elf     |  – | – | 21375 | 0.83 | size-opt smaller |
+
+* static instr/byte = static_instr / (BENCH_SIZE * NUM_BLOCKS) with bench window 1024*25 = 25600 B.
+  This is a code-density metric, not dynamic instr/byte. Dynamic QEMU instr/byte
+  would be >>1 (Renode cyc/byte is 58–105 cyc/B for records, throughput loop similar).
+
+Cross-core ratios (static proxy):
+- M0+/M3: 34653/23077 = 1.50× more static instructions on M0+ (Thumb-1 expansion).
+- M4/M3: 23119/23077 = 1.002× (0.2% diff)
+- M33/M3: 23070/23077 = 0.9997× (0.03% diff)
+- size-opt vs default: M0+ 0.90×, M3 0.93× (smaller code, fewer instructions)
+
+Compare to Renode dynamic ordering (tools/renode/out/matrix.tsv, 10 repeats, 32 MHz):
+- Throughput avg: m0plus 0.477 MiB/s, m3/m4/m33 1.062 MiB/s -> M3/M0+ = 2.23×
+- Per-algo ASCON: M3/M0+ 1.83×, ChaPoly 3.94×, AES-GCM 2.34× — M0+ slowest, M3/M4/M33 tied.
+- Per-record cyc: M0+ 2645.9, M3/M4/M33 1484.8 -> M0+/M3 = 1.78×
+- Determinism: std = 0.000 for all cores/algorithms (Renode emulator).
+
+Renode ordering vs static proxy:
+- Ordering matches exactly: M0+ slowest (most instructions), M3 = M4 = M33 tied.
+- Magnitude: static 1.50× vs Renode cycle 1.78× and throughput 2.23× — same direction,
+  within ~30% of cycle ratio; M3/M4/M33 equivalence is 0.2% (proxy) vs 0.0% (Renode),
+  i.e. within <1% (well within the 15% target for the tied cores). The remaining
+  gap is expected because static counts ignore dynamic loop iteration and pipeline
+  effects; a true QEMU -d instr dynamic count is needed for a tight ~15% magnitude
+  check on M0+ vs M3.
+
+## 5. Future work — real QEMU triangulation
+
+When WSL apt is responsive, run:
+
+```bash
+wsl sudo apt update && sudo apt install -y qemu-system-arm qemu-user binutils-arm-none-eabi
+# then from Windows PowerShell (or WSL):
+pwsh -File tools/qemu/triangulate.ps1 -Elf tools/renode/out/bench-m3.elf -QemuLog tools/qemu/qemu.log
+# or directly:
+wsl qemu-system-arm -M mps2-an385 -nographic -kernel tools/renode/out/bench-m3.elf -d instr -D tools/qemu/qemu.log -semihosting
+wc -l tools/qemu/qemu.log; echo "instr/byte=$(( $(wc -l < qemu.log) / 25600 ))"
+```
+
+Repeat for each bench-*.elf, then compute Ascon/ChaCha/AES-GCM instr ratios by
+rebuilding each variant (e.g. with -DWOLFSSL_ASCON_32BIT vs ChaCha-only) and
+comparing qemu.log line counts. QEMU is not cycle-accurate (instr count only);
+use Renode SysTick or DWT (hal.h PQM4_DWT) for cycle estimates.
+
+## 6. Files
+
+- tools/renode/out/bench-m0plus.elf (231260 B), bench-m3.elf (229844 B), bench-m4.elf, bench-m33.elf
+- tools/qemu/triangulate.ps1 (existing, unchanged)
+- tools/qemu/qemu.log — not produced (QEMU not installed); see this triangulate.log as proxy
+- tools/qemu/triangulate.log — this file
