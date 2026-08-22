@@ -214,5 +214,5 @@ Theorem channel_security_enforced
   (* adv_mask is absent: the mask adds no term. *)
   adv_channel <= exp2 36 + exp2 16.
 Proof.
-  apply concrete_enforced; assumption.
+  exact (concrete_enforced adv_intctxt_1 adv_intctxt_qR adv_indcpa adv_channel Hhybrid Hchannel Hconf Hint1).
 Qed.

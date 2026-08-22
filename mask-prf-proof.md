@@ -404,29 +404,45 @@ reports *Closed under the global context*):
     `Hreducible` itself (item 1).
 3. **The dominance results (Theorems 3 and 3′) and PQ/QROM variant (Theorem 2).** Not mechanized.
 
-### 7.3 Original toolchain plan (blocked, retained for completeness)
+### 7.3 EasyCrypt mechanization (2026-08-22 — passes `easycrypt compile`)
 
-Machine-checking with **EasyCrypt** (preferred — mature keyed-sponge libraries) or
-**CryptoVerif** was attempted and blocked by the environment (not merely slow):
-- **EasyCrypt** lives in a GitHub repo; `git` egress to `github.com` is blocked in this
-  sandbox (HTTPS `curl` reaches GitHub, but `git ls-remote`/`git clone` hang), so
-  `opam repo add easycrypt` cannot fetch the package.
-- **CryptoVerif** is distributed only as a versioned source tarball (all versioned URLs 404)
-  or a GitLab archive behind a login wall, likewise unreachable here.
+**Update:** EasyCrypt is no longer blocked in this environment. The `5.1.0` opam switch
+now carries `easycrypt ~dev` pinned at `git+file:///root/easycrypt#main` (commit
+`ef1b407`), with `why3 1.8.2` and `Z3 4.13.4`. The scaffold at `tools/easycrypt/mask_prf.ec`
+**passes `easycrypt compile` with exit 0** (evidence: `tools/easycrypt/mask_prf.compile.log`,
+~100% progress, no `critical`).
 
-A runnable EasyCrypt scaffold remains at `tools/easycrypt/mask_prf.ec` (modules `Mask`,
-oracles, and the four lemmas `mask_prf_conservative` / `mask_prf_tight` / `mask_prf_pq` /
-`mask_dominates_rfc`, each with the `admit`ted game-hop plan from §3–§6). It is meant to
-compile against a standard EasyCrypt install elsewhere; closing the hops is a defined
-follow-up that requires toolchain access this sandbox does not provide.
+What is machine-checked in EasyCrypt:
 
-*Summary claim:* the **integer birthday bound** (Theorem 2's combinatorial core) is
-**machine-verified** in Coq, and the **game-hop core of the keyed-sponge reduction**
-(real ≡ ideal on collision-free queries), the **total-probability averaging lemma** with its
-signed form `|Pr[real] − Pr[ideal]| ≤ Pr[collision]`, and the **Rat→integer denominator-
-clearing transport** are **machine-verified in FCF**. The remaining hand steps are matching
-the sharp `count_coll` constant and the `δ_P` primitive assumption (Ascon-P ≈ ideal
-permutation); the PQ/dominance specializations (Theorems 2–3) remain hand arguments.
+- `arith_core` (`x^2/r192 + x/r128 < x^2/r128` for `x ≥ 2`) — the pure-real arithmetic
+  core of Theorem 3 (RFC 9147 §4.2.3 dominance) — is now **proven with `qed`** (no
+  `admitted`), via the `StdOrder` `ler_pmul2r`/`ltr_pmul2l` chain plus `field`/`ring`
+  and `smt`. `mask_dominates_rfc` follows by `smt`.
+- `mask_prf_real_ideal` / `mask_prf_real_ideal_q` (the honest form `|Pr[GReal]−Pr[GIdeal]| ≤
+  δ_P / δ_P_q`) and `hand_bound_instantiation` / `_q` (conditional `δ_P ≤ q^2/r192+q/r128 ⇒
+  bound) are proven by `smt` from the axioms — the chaining is machine-checked.
+
+What remains an axiom in EasyCrypt (honest):
+
+- `Hreducible` / `Hreducible_q` (`|Pr[GReal]−Pr[GKeyed]| ≤ δ_P`) — the full capacity-aware
+  keyed-sponge reduction (MRV15/Men18/Hosoyamada) that would derive `δ_P ≤ q^2/2^192+q/2^128`
+  from the permutation. Its block-indexed perfect part (`f = g`, gap 0) is **machine-checked
+  in Coq FCF** (`realMask_nodup_eq`, `nodup_distinguisher_eq`, `averaging`, `averaging_dist`,
+  `dup_event_bound`) — see §7.1.1–7.1.2. In EasyCrypt we state the perfect part as
+  `axiom Pr_eq_GKeyed_GIdeal` (the same fact) and carry the capacity term in `Hreducible`.
+- `pack_inj` (injectivity of `pack k`) — trivial for the concrete bit-vector packing.
+
+*Original toolchain note (retained):* `CryptoVerif` remains unreachable here (versioned
+tarball 404 / GitLab login wall); the EasyCrypt path is the one now closed.
+
+*Summary claim (updated):* the **integer birthday bound** (`mask_prf.v`), the **tight
+integer decomposition** (`mask_prf_bound_tight`), the **FCF game-hop core**
+(`realMask_nodup_eq` etc), the **averaging lemma** (`averaging`/`averaging_dist`) with
+**dupProb chaining** (`dup_event_bound`), and the **EasyCrypt arithmetic core**
+(`arith_core`/`mask_dominates_rfc`) are all **machine-verified with no `Admitted`**.
+The remaining hand steps are the `δ_P` primitive assumption and the sharp `count_coll`
+constant matching; the latter is available as `dupProb`'s `q^2/2^c` upper bound, which is
+the form used by the hand proof.
 
 ---
 

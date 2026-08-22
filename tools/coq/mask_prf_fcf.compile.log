@@ -1,0 +1,26 @@
+File "./mask_prf_fcf.v", line 1, characters 0-23:
+Warning: Notations "[ ]" defined at level 0 and "[ 0 .. _ )"
+defined at level 77 have incompatible prefixes.
+One of them will likely not work.
+[notation-incompatible-prefix,parsing,default]
+File "./mask_prf_fcf.v", line 1, characters 0-23:
+Warning: Notations "{ ' _ | _ }" defined at level 0 and "{ 0 , 1 } ^ _"
+defined at level 77 have incompatible prefixes.
+One of them will likely not work.
+[notation-incompatible-prefix,parsing,default]
+File "./mask_prf_fcf.v", line 1, characters 0-23:
+Warning: Notations "{ 0 , 1 } ^ _" defined at level 77 and "{ 0 , 1 }"
+defined at level 75 have incompatible prefixes.
+One of them will likely not work.
+[notation-incompatible-prefix,parsing,default]
+File "./mask_prf_fcf.v", line 1, characters 0-23:
+Warning: Notations "[ _ ]" defined at level 0 with arguments constr
+and "[ _ , _ ] <-$2 _ ; _" defined at level 81 with arguments constr
+have incompatible prefixes. One of them will likely not work.
+[notation-incompatible-prefix,parsing,default]
+File "./mask_prf_fcf.v", line 6, characters 15-26:
+Warning: Loading Stdlib without prefix is deprecated.
+Use "From Stdlib Require Permutation"
+or the deprecated "From Coq Require Permutation"
+for compatibility with older Coq versions.
+[deprecated-missing-stdlib,deprecated-since-9.0,deprecated,default]

@@ -1,0 +1,4 @@
+File "./robust_channels.v", line 184, characters -695--695:
+Warning: Not interpreting "*)" as the end of current non-terminated comment
+because it occurs in a non-terminated string of the comment.
+[comment-terminator-in-string,parsing,default]
