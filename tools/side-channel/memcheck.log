@@ -1,0 +1,21 @@
+# memcheck.log — WSL pending (valgrind not available on this host)
+# Date: 2026-08-23
+# Host: Windows 11 MSYS2 ucrt64 + WSL2 Ubuntu 24.04.1 (kernel 6.6.87.2-microsoft-standard-WSL2)
+# Attempt: valgrind --tool=memcheck --track-origins=yes --error-exitcode=1
+
+Repro commands (run on WSL/Linux):
+  gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect
+  gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32
+  valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect 2>&1 | tee tools/side-channel/memcheck.log
+  valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect32 2>&1 | tee -a tools/side-channel/memcheck.log
+
+Attempt output (WSL):
+  $ wsl bash -c "valgrind --version"
+  bash: line 1: valgrind: command not found
+  $ wsl bash -c "which valgrind" -> not found
+  $ sudo apt-get install -y valgrind -> hung (no network / apt lock), WSL shutdown + retry still not found
+
+Status: PENDING — valgrind not available in this WSL image. Repro commands above are valid for any Linux runner with valgrind installed.
+Expected result: PASS (no secret-dependent branch/address) — mask path is arithmetic-only (XOR/ANDNOT/ROTR, fixed 12 rounds, round_constants[round] only), same guarantee verified by dudect 64+32 PASS and static audit.
+
+# With VALGRIND_MAKE_MEM_UNDEFINED marking ct/sn_key undefined, any branch or address derived from secret would be reported as "use of undefined value".

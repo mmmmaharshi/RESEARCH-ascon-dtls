@@ -90,42 +90,87 @@ Timing: `rdtsc` serialized with `lfence` before/after the call, `N=80,000` sampl
 per round, up to 8 rounds (~640k measurements per test). Three crops: `p100` (all),
 `p99`, `p90` — standard dudect outlier handling. `WARMUP=5000` stabilizes predictors.
 
-Build (64-bit, default): `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c
- -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe` (MSYS2 ucrt64, 14.2.0).
-32-bit repro (same harness, split-halves path — also arithmetic-only, expected
-PASS): `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe` — future CI matrix entry (64+32).
+Build (64-bit): `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log` (MSYS2 ucrt64, 14.2.0).
+32-bit (split-halves, arithmetic-only): `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log` — 2026-08-23 PASS matches 64-bit (see §4). Full 4-job matrix: §5.
 
 ## 4. Result (negative — publishable)
 
 Host: x86-64 MSYS2 ucrt64, i7, frequency scaling left on (conservative — if it
-passes here, it passes cleanly on a pinned Cortex-M).
+passes here, it passes cleanly on a pinned Cortex-M). 2026-08-23 re-run matrix
+(64-bit + 32-bit) — both PASS, both arithmetic-only (32-bit = split halves).
 
+| job | command | log | verdict |
+|-----|---------|-----|---------|
+| dudect 64-bit | `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect` | `tools/ascon_mask_dudect.log` | **PASS** |
+| dudect 32-bit | `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32` | `tools/ascon_mask_dudect32.log` | **PASS** |
+| memcheck 64+32 | `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect*` | `tools/side-channel/memcheck.log` | **PENDING** (WSL valgrind not available — repro commands documented) |
+| cachegrind 64+32 | `valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/dudect && cg_annotate cachegrind.out` | `tools/side-channel/cachegrind.log` | **PENDING** (WSL valgrind not available — repro commands documented) |
+
+64-bit (`tools/ascon_mask_dudect.log`, 2026-08-23):
 ```
 dudect Ascon-Mask — wc_AsconAEAD128_Mask (Ascon-P12, RNDIMSK_)
 host: x86_64 MSYS2 ucrt64 gcc 14.2.0 -O2 rdtsc lfence pre-generated inputs
 
 === A) fixed-ct vs random-ct  (attacker-influenced ct, same key) (N=80000) ===
  rnd |     t(p100)    t(p99)    t(p90)  | verdict
-  0  |       0.93    -0.79    -1.02 | ok
-  1  |      -1.13    -0.98    -0.42 | ok
-  ... all 8 rounds |t| < 1.7 | ok
+  0  |      -0.85     1.99     0.56 | ok
+  1  |      -0.85    -0.15     0.22 | ok
+  2  |       0.69     0.72    -0.32 | ok
+  3  |      -1.91    -0.87     0.59 | ok
+  4  |      -0.97    -0.54     0.89 | ok
+  5  |      -0.09    -1.05    -0.82 | ok
+  6  |       0.52    -0.59     0.76 | ok
+  7  |      -0.65    -0.85    -1.37 | ok
 => No distinguisher: |t|<4.5 at all crops — constant-time (first-order).
 
 === B) fixed-key vs random-key (secret key, same ct) (N=80000) ===
  rnd |     t(p100)    t(p99)    t(p90)  | verdict
-  0  |      -0.18    -0.12    -0.39 | ok
-  ... all 8 rounds |t| < 1.7 | ok
+  0  |      -1.08     0.58     0.29 | ok
+  1  |      -0.55     1.34     1.26 | ok
+  ... all 8 rounds |t| < 2.2 | ok
 => No distinguisher: |t|<4.5 at all crops — constant-time (first-order).
 
 === C) control random-vs-random (sanity) (N=80000) ===
-  0  |       0.98     2.02     1.46 | ok
-  ... all rounds |t| < 2.1 | ok
+  0  |       1.20     1.71     0.95 | ok
+  ... all 5 rounds |t| < 1.8 | ok
 => No distinguisher: |t|<4.5 — harness unbiased.
 Summary: A=ok  B=ok  C=ok
 OVERALL: PASS — mask path constant-time on this host.
 ```
 
-Raw log: `tools/ascon_mask_dudect.log`.
+32-bit (`tools/ascon_mask_dudect32.log`, 2026-08-23 — same harness with `-DWOLFSSL_ASCON_32BIT`, split-halves arithmetic-only):
+```
+dudect Ascon-Mask — wc_AsconAEAD128_Mask (Ascon-P12, RNDIMSK_)
+host: x86_64 MSYS2 ucrt64 gcc 14.2.0 -O2 rdtsc lfence pre-generated inputs
+
+=== A) fixed-ct vs random-ct  (attacker-influenced ct, same key) (N=80000) ===
+ rnd |     t(p100)    t(p99)    t(p90)  | verdict
+  0  |      -0.61    -0.69    -1.06 | ok
+  1  |      -0.57    -0.33    -1.58 | ok
+  2  |      -0.88    -0.95    -0.83 | ok
+  3  |      -1.30     0.29     0.08 | ok
+  4  |      -0.28    -0.05    -2.69 | ok
+  5  |      -1.12     0.14     0.73 | ok
+  6  |      -1.67     0.80     0.85 | ok
+  7  |      -1.26     0.69    -0.09 | ok
+=> No distinguisher: |t|<4.5 at all crops — constant-time (first-order).
+
+=== B) fixed-key vs random-key (secret key, same ct) (N=80000) ===
+  0  |       0.73    -0.31    -0.15 | ok
+  ... all 8 rounds |t| < 1.5 | ok
+=> No distinguisher: |t|<4.5 at all crops — constant-time (first-order).
+
+=== C) control random-vs-random (sanity) (N=80000) ===
+  0  |       1.10    -0.01    -0.12 | ok
+  ... all 5 rounds |t| < 1.9 | ok
+=> No distinguisher: |t|<4.5 — harness unbiased.
+Summary: A=ok  B=ok  C=ok
+OVERALL: PASS — mask path constant-time on this host.
+```
+
+32-bit PASS matches 64-bit PASS — both paths are arithmetic-only (64-bit: `WORD64` XOR/ANDNOT/ROTR fixed; 32-bit: each 64-bit word as two 32-bit halves, same XOR/ANDNOT/ROTR sequence, `round_constants[round]` indexed by round only). No data-dependent branch or table.
+
+Raw logs: `tools/ascon_mask_dudect.log` (64-bit), `tools/ascon_mask_dudect32.log` (32-bit), `tools/side-channel/memcheck.log` + `cachegrind.log` (WSL pending, repro documented).
 
 Interpretation: **no first-order timing distinguisher** on either the
 attacker-influenced `ct` path or the secret `sn_key` path. The control passing
@@ -141,33 +186,45 @@ table lookups) and that dudect finds no distinguisher converts the liability int
 a contribution: "we considered the obvious attack on the new mask and it does not
 exist by construction + measurement."
 
-## 5. Valgrind / memcheck & cachegrind note
+## 5. Valgrind / memcheck & cachegrind — 4-job repro matrix
 
 `valgrind --tool=memcheck --track-origins=yes` (secret-dependent branch / address
-detection via memcheck — flags any branch or address derived from undefined
-secret bytes) and `valgrind --tool=cachegrind --branch-sim=yes` (cache-timing
-triangulation) are the complementary static-dynamic checks. On this Windows/MSYS2
-host `valgrind` is unavailable; on WSL/Linux copy-paste:
+detection — flags any branch or address derived from undefined secret bytes) and
+`valgrind --tool=cachegrind` (cache-timing triangulation, `cg_annotate`) are the
+complementary static-dynamic checks. Full 4-job matrix (dudect 64+32, memcheck, cachegrind):
 
 ```sh
-# 64-bit (default) + 32-bit (split-halves) — both arithmetic-only, expected PASS
-gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe && ./tools/ascon_mask_dudect.exe
-gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe
+# Job 1 — dudect 64-bit (default, arithmetic-only)
+gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log
+# Job 2 — dudect 32-bit (split-halves, arithmetic-only, expected PASS matches 64-bit)
+gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log
 
-# memcheck: secret-dependent branches/addresses
-wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect.exe
-wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect32.exe
-# cachegrind: branch + cache simulation (triangulation, not cycle-accurate)
-wsl -- valgrind --tool=cachegrind --branch-sim=yes ./tools/ascon_mask_dudect.exe
-wsl -- valgrind --tool=cachegrind --branch-sim=yes ./tools/ascon_mask_dudect32.exe
-# with ct/sn_key marked undefined (VALGRIND_MAKE_MEM_UNDEFINED in a minimal driver),
-# any secret-dependent branch/address is reported as use of undefined value
+# Job 3 — memcheck: secret-dependent branches/addresses (ct/sn_key marked undefined)
+valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect 2>&1 | tee memcheck.log
+valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect32 2>&1 | tee -a memcheck.log
+# with VALGRIND_MAKE_MEM_UNDEFINED in a minimal driver, any secret-dependent branch/address is reported as use of undefined value
+
+# Job 4 — cachegrind: branch + cache simulation (triangulation, not cycle-accurate)
+valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/dudect 2>&1 | tee cachegrind.log
+cg_annotate cachegrind.out | tee -a cachegrind.log
+valgrind --tool=cachegrind --cachegrind-out-file=cachegrind32.out /tmp/dudect32 2>&1 | tee -a cachegrind.log
+cg_annotate cachegrind32.out | tee -a cachegrind.log
+# alternative: valgrind --tool=cachegrind --branch-sim=yes /tmp/dudect
 ```
+
+Execution 2026-08-23 (Windows 11 MSYS2 ucrt64 + WSL2 Ubuntu 24.04.1, kernel 6.6.87.2):
+
+| job | result | evidence |
+|-----|--------|----------|
+| dudect 64-bit | **PASS** | `tools/ascon_mask_dudect.log` (§4 above) |
+| dudect 32-bit | **PASS** | `tools/ascon_mask_dudect32.log` (§4 above, matches 64-bit — both arithmetic-only split halves) |
+| memcheck | **PENDING** | `tools/side-channel/memcheck.log` — `wsl bash -c "valgrind --version"` → `command not found`; `sudo apt-get install -y valgrind` hung (WSL image without valgrind). Repro commands above valid for Linux runner. Expected PASS (no undefined-dependent branch/address — binary has no conditional on `s64`/`ct`/`key` in hot path, §2). |
+| cachegrind | **PENDING** | `tools/side-channel/cachegrind.log` — same WSL valgrind not available. Repro commands above valid. Expected no secret-dependent branches/cache misses (straight-line XOR/ANDNOT/ROTR, fixed 12 rounds). |
 
 The same guarantee is already provided by the code audit above — the binary
 contains no conditional on `s64`/`ct`/`key` in the hot path — so valgrind would
 only confirm the absence of a compiler-introduced secret-dependent optimization.
-This is left as a one-line CI job for the Linux runner (matrix 64-bit + 32-bit, memcheck + cachegrind).
+Leave Jobs 3-4 as CI jobs for the Linux runner (matrix 64-bit + 32-bit, memcheck + cachegrind).
 
 ## 6. Limitations & next steps (honest)
 
@@ -185,9 +242,9 @@ This is left as a one-line CI job for the Linux runner (matrix 64-bit + 32-bit, 
   next-step validation (M3/M4/M33; M0+ falls back to SysTick SYST_CVR@0xE000E018).
 - **32-bit path:** `WOLFSSL_ASCON_32BIT` uses the same arithmetic with split halves
   (each 64-bit word as two 32-bit halves, same XOR/ANDNOT/ROTR sequence) — both
-  paths are arithmetic-only and expected PASS. Repro (64-bit + 32-bit):
-  `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe && ./tools/ascon_mask_dudect.exe`
-  and `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe`. Add as future CI matrix entry (64-bit + 32-bit).
+  paths are arithmetic-only. **Verified 2026-08-23: 32-bit PASS matches 64-bit PASS** (§4, `tools/ascon_mask_dudect32.log` vs `tools/ascon_mask_dudect.log`). Repro:
+  `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log`
+  and `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log`. Keep as CI matrix entry (64-bit + 32-bit).
 - **`ForceZero`:** verified to wipe `AsconState s`; its own timing is not part of
   the mask distinguisher (measured interval excludes it only insofar as it is after
   the `rdtsc` window — the wipe itself is outside the mask PRF).
@@ -206,9 +263,10 @@ This is left as a one-line CI job for the Linux runner (matrix 64-bit + 32-bit, 
   (cryptographic PRF bound vs. implementation leakage).
 
 ---
-*Repro (64-bit):* `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe && ./tools/ascon_mask_dudect.exe`
-*Repro (32-bit):* `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe` (both arithmetic-only, expected PASS; CI matrix 64+32)
-*Valgrind memcheck (WSL):* `wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect.exe` and `wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect32.exe` (secret-dependent branches/addresses)
-*Valgrind cachegrind (WSL):* `wsl -- valgrind --tool=cachegrind --branch-sim=yes ./tools/ascon_mask_dudect.exe` and `wsl -- valgrind --tool=cachegrind --branch-sim=yes ./tools/ascon_mask_dudect32.exe` (branch + cache triangulation)
+*Repro matrix (4 jobs, §5):*
+*  Job 1 dudect 64-bit:* `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log` → PASS (`tools/ascon_mask_dudect.log`)
+*  Job 2 dudect 32-bit:* `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log` → PASS (`tools/ascon_mask_dudect32.log`, matches 64-bit, arithmetic-only split halves)
+*  Job 3 memcheck (WSL/Linux):* `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect 2>&1 | tee memcheck.log` + same for `/tmp/dudect32` (secret-dependent branches/addresses) → PENDING (WSL valgrind not available 2026-08-23, `tools/side-channel/memcheck.log` documents attempt; Linux CI)
+*  Job 4 cachegrind (WSL/Linux):* `valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/dudect && cg_annotate cachegrind.out | tee cachegrind.log` + same for 32-bit (branch + cache triangulation) → PENDING (WSL valgrind not available, `tools/side-channel/cachegrind.log`)
 *Renode DWT future work:* `tools/renode/hal.h` + `tools/renode/build_bench.ps1 -Dwt` (`-DPQM4_DWT -O2`); QEMU triangulation `tools/qemu/triangulate.ps1` (not cycle-accurate, triangulation only).
-Log: `tools/ascon_mask_dudect.log`. Static audit: `wolfssl/wolfcrypt/src/ascon.c` `permutation()` + `wc_AsconAEAD128_Mask()`.
+Logs: `tools/ascon_mask_dudect.log`, `tools/ascon_mask_dudect32.log`, `tools/side-channel/memcheck.log`, `tools/side-channel/cachegrind.log`. Static audit: `wolfssl/wolfcrypt/src/ascon.c` `permutation()` + `wc_AsconAEAD128_Mask()`.

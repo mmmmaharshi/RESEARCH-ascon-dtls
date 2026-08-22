@@ -1,0 +1,25 @@
+# cachegrind.log — WSL pending (valgrind/cachegrind not available on this host)
+# Date: 2026-08-23
+# Host: Windows 11 MSYS2 ucrt64 + WSL2 Ubuntu 24.04.1 (kernel 6.6.87.2-microsoft-standard-WSL2)
+# Attempt: valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out
+
+Repro commands (run on WSL/Linux):
+  gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect
+  gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32
+  valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/dudect 2>&1 | tee tools/side-channel/cachegrind.log
+  cg_annotate cachegrind.out | tee -a tools/side-channel/cachegrind.log
+  valgrind --tool=cachegrind --cachegrind-out-file=cachegrind32.out /tmp/dudect32 2>&1 | tee -a tools/side-channel/cachegrind.log
+  cg_annotate cachegrind32.out | tee -a tools/side-channel/cachegrind.log
+
+# Alternative branch simulation:
+#   valgrind --tool=cachegrind --branch-sim=yes /tmp/dudect
+
+Attempt output (WSL):
+  $ wsl bash -c "valgrind --version"
+  bash: line 1: valgrind: command not found
+  $ wsl bash -c "which cg_annotate" -> not found
+
+Status: PENDING — cachegrind not available in this WSL image. Repro commands above are valid for any Linux runner with valgrind installed.
+Expected result: no secret-dependent branches/cache misses — permutation is straight-line arithmetic (XOR/ANDNOT/ROTR), no data-indexed tables, loop bound fixed at 12.
+Triangulation note: cachegrind is cache simulation (triangulation, not cycle-accurate), complementary to dudect timing.
+
