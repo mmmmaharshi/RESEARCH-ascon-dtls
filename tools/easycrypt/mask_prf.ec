@@ -118,6 +118,10 @@ op delta_P   : real.
 op delta_P_q : real.
 op delta_AES : real.
 
+
+lemma rpos_neq0 (x : real) : 0%r < x => x <> 0%r.
+proof. move => hx; smt. qed.
+
 (* Query count. *)
 const q : int.
 axiom q_pos : 0 < q.
@@ -154,7 +158,20 @@ proof.
     have e2 : 2%r * (r64 - 1%r) <= x * (r64 - 1%r).
     + apply (ler_pmul2r (r64 - 1%r) hp1). exact hx.
     smt.
-  (* remaining: two mechanical positive-multiplication steps; deferred *)
+  (* h8: multiply h7 by the positive x*r128 *)
+  have h8 : x * r192 < x^2 * (r192 - r128).
+  + have hpm : 0%r < x * r128 by smt.
+    have heq1 : x * r192 = (x * r128) * r64.
+    + rewrite r192_def. ring.
+    have heq2 : x^2 * (r192 - r128)
+              = (x * r128) * (x * (r64 - 1%r)).
+    + rewrite r192_def r128_def. field.
+    rewrite heq1 heq2.
+    apply/(ltr_pmul2l (x * r128) hpm).
+    exact h7.
+  (* final: multiply the divided goal by positive r192*r128; the
+     multiplied form reduces to h8 by field/ring — deferred to next
+     session (needs a working local-rewrite or field-with-hints idiom) *)
 admitted.
 
 (* ------------------------------------------------------------------ *)
