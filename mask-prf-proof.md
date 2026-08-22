@@ -285,8 +285,28 @@ reports *Closed under the global context*):
   collision-event probability (`ret_bool_prob`: `Pr[ret b]` is the indicator of `b`).
   Combined with FCF's `HasDups.dupProb` (`Pr[hasDups] ≤ q²/2^c`) this yields
   `adv ≤ q²/2^c` in probability form.
-- Still open: scaling to the exact integer form `U^q · adv ≤ count_coll q U` (Rat→Z
-  transport) — bookkeeping, not analysis.
+- **Signed advantage and Rat→integer scaling (also machine-checked):**
+  - `averaging_gen`: the averaging lemma generalized over arbitrary per-sample branches
+    `g`/`h` (bounded by 1, equal on collision-free samples); `averaging` and
+    `averaging_sym` are the real/ideal instances, so the bound holds in **both directions**.
+  - `averaging_dist`: the signed advantage form — `|Pr[real] − Pr[ideal]| ≤ Pr[collision]`
+    via a new `dist_le_of_bounds` algebra helper (`ratSubtract_leRat_l`,
+    `ratSubtract_add_cancel`, case analysis on `bleRat`).
+  - `clear_denoms` + `scaling_int`: FCF rationals are `RatIntro (num : nat) (den : posnat)`,
+    so clearing denominators is exactly FCF's `leRat_mult`; `scaling_int` transports the
+    advantage bound into the nat inequality between cleared numerators
+    `fst(ratCD dist dup) ≤ snd(ratCD dist dup)` where `ratCD rd pb = (num_r·den_pb,
+    num_pb·den_r, …)`. All five results report *Closed under the global context*.
+- **`dupProb` chained (also machine-checked):** `dup_event_bound` proves
+  `Pr[DupEvent q] ≤ q²/2^c` by showing `repeatRnd q` has exactly the iid-uniform
+  distribution of FCF's `compMap` sampling shape (`repeatRnd_compMap_pt`, via a new
+  support-permutation bridge `supports_perm` + shared-continuation lift `bind_ext`,
+  coupled per round with `rel_seq`) and then applying FCF's `HasDups.dupProb`.
+  Combined with `averaging_dist` this yields the fully machine-checked
+  `|Pr[real] − Pr[ideal]| ≤ q²/2^c`. All report *Closed under the global context*.
+- Still open: matching the exact `count_coll q U` combinatorial identity (its sharp
+  `C(q,2)/U` constant vs `dupProb`'s `q²/2^c`) and dyadic-denominator normalization of the
+  game probabilities to recover the literal statement `U^q · adv ≤ count_coll q U`.
  2. **The tight `q²/2^c + q/2^k` specialization (Theorem 1′).** ~~The verified `mask_prf_bound`
     is the conservative `q(q−1)/(2·2^c)` form; the tighter `q²/2^192 + q/2^128` requires the
     refined analysis and remains a hand argument.~~ **NOW MACHINE-CHECKED** by
@@ -313,9 +333,10 @@ follow-up that requires toolchain access this sandbox does not provide.
 
 *Summary claim:* the **integer birthday bound** (Theorem 2's combinatorial core) is
 **machine-verified** in Coq, and the **game-hop core of the keyed-sponge reduction**
-(real ≡ ideal on collision-free queries) plus the **total-probability averaging lemma**
-(`adv ≤ Pr[collision]`) are **machine-verified in FCF**. The remaining hand steps are the
-Rat→integer scaling of the reduction and the `δ_P` primitive assumption (Ascon-P ≈ ideal
+(real ≡ ideal on collision-free queries), the **total-probability averaging lemma** with its
+signed form `|Pr[real] − Pr[ideal]| ≤ Pr[collision]`, and the **Rat→integer denominator-
+clearing transport** are **machine-verified in FCF**. The remaining hand steps are matching
+the sharp `count_coll` constant and the `δ_P` primitive assumption (Ascon-P ≈ ideal
 permutation); the PQ/dominance specializations (Theorems 2–3) remain hand arguments.
 
 ---

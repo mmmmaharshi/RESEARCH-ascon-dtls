@@ -3,6 +3,7 @@ Require Import FCF.CompFold.
 Require Import FCF.ProgramLogic.
 Require Import FCF.HasDups.
 Require Import FCF.RndInList.
+Require Import Permutation.
 
 Local Open Scope list_scope.
 
@@ -357,11 +358,11 @@ Section MaskPRF.
   Proof.
     intros r i d H1 H2.
     assert (Hri : ratSubtract r i <= d).
-    { eapply leRat_trans with (r2 := ratSubtract (r + d)%rat i).
+    { eapply leRat_trans with (r2 := ratSubtract (i + d)%rat i).
       - apply ratSubtract_leRat_l. exact H1.
       - apply eqRat_impl_leRat. apply ratSubtract_add_cancel. }
     assert (Hir : ratSubtract i r <= d).
-    { eapply leRat_trans with (r2 := ratSubtract (i + d)%rat r).
+    { eapply leRat_trans with (r2 := ratSubtract (r + d)%rat r).
       - apply ratSubtract_leRat_l. exact H2.
       - apply eqRat_impl_leRat. apply ratSubtract_add_cancel. }
     unfold ratDistance, maxRat, minRat.
@@ -377,7 +378,7 @@ Section MaskPRF.
         (evalDist (ls <-$ repeatRnd q; r <-$ IdealMask ls; A r) true) <=
       evalDist (DupEvent q) true.
   Proof.
-    intros q A. apply ratDistance_le.
+    intros q A. apply dist_le_of_bounds.
     - apply averaging.
     - apply averaging_sym.
   Qed.
@@ -390,16 +391,17 @@ Section MaskPRF.
      probability-form bound to an integer inequality between scaled counts. *)
   Lemma clear_denoms :
     forall (r b : Rat),
+      r <= b ->
       match r, b with
       | RatIntro nr dr, RatIntro nb db =>
           (nr * posnatToNat db <= nb * posnatToNat dr)%nat
       end.
   Proof.
-    intros r b. destruct r as [nr dr]; destruct b as [nb db].
+    intros r b Hle. destruct r as [nr dr]; destruct b as [nb db].
     destruct dr as [drv drpos]; destruct db as [dbv dbpos].
-    simpl.
-    apply (leRat_mult nr nb drv dbv drpos dbpos).
-    simpl. assumption.
+    simpl in Hle |- *.
+    eapply leRat_mult.
+    exact Hle.
   Qed.
 
   (* Integer form of the advantage bound: with rd = |Pr[real]-Pr[ideal]|
@@ -407,16 +409,16 @@ Section MaskPRF.
      inequality fst(ratCD rd pb) <= snd(ratCD rd pb). *)
   Corollary scaling_int :
     forall (q : nat) (A : list R -> Comp bool),
-      (fst (ratCD
+      (fst (fst (ratCD
         (ratDistance
            (evalDist (ls <-$ repeatRnd q; r <-$ realMask nil ls; A r) true)
            (evalDist (ls <-$ repeatRnd q; r <-$ IdealMask ls; A r) true))
-        (evalDist (DupEvent q) true)) <=
-       fst (snd (ratCD
+         (evalDist (DupEvent q) true))) <=
+       snd (fst (ratCD
         (ratDistance
            (evalDist (ls <-$ repeatRnd q; r <-$ realMask nil ls; A r) true)
            (evalDist (ls <-$ repeatRnd q; r <-$ IdealMask ls; A r) true))
-        (evalDist (DupEvent q) true))))%nat.
+         (evalDist (DupEvent q) true))))%nat.
   Proof.
     intros q A.
     pose proof (averaging_dist q A) as Hd.
@@ -426,8 +428,104 @@ Section MaskPRF.
       as [nd dd].
     destruct (evalDist (DupEvent q) true) as [nb db].
     unfold ratCD. simpl.
-    apply clear_denoms.
-    assumption.
+    exact (leRat_mult (pf1 := proj2_sig dd) (pf2 := proj2_sig db) Hd).
+  Qed.
+
+  (* Distributions equal pointwise => supports are permutations. *)
+  Lemma supports_perm :
+    forall (A : Set) (C1 C2 : Comp A),
+      (forall y, evalDist C1 y == evalDist C2 y) ->
+      Permutation (getSupport C1) (getSupport C2).
+  Proof.
+    intros A C1 C2 Heq.
+    apply NoDup_Permutation.
+    - apply getSupport_NoDup.
+    - apply getSupport_NoDup.
+    - intros y. rewrite !getSupport_In_evalDist.
+      split; intro H; intro H0.
+      + apply H. eapply eqRat_trans; [apply Heq | exact H0].
+      + apply H. eapply eqRat_trans;
+          [apply eqRat_symm; apply Heq | exact H0].
+  Qed.
+
+  (* Pointwise-equal distributions under a shared continuation. *)
+  Lemma bind_ext :
+    forall (A B : Set) (C1 C2 : Comp A) (F : A -> Comp B),
+      (forall y, evalDist C1 y == evalDist C2 y) ->
+      forall x, evalDist (Bind C1 F) x == evalDist (Bind C2 F) x.
+  Proof.
+    intros A B C1 C2 F Heq x.
+    assert (E1 : evalDist (Bind C1 F) x ==
+                 sumList (getSupport C1)
+                   (fun a => evalDist C1 a * evalDist (F a) x))
+      by apply evalDist_seq_step.
+    assert (E2 : evalDist (Bind C2 F) x ==
+                 sumList (getSupport C2)
+                   (fun a => evalDist C2 a * evalDist (F a) x))
+      by apply evalDist_seq_step.
+    eapply eqRat_trans with
+      (r2 := sumList (getSupport C2)
+               (fun a => evalDist C1 a * evalDist (F a) x)).
+    - eapply sumList_permutation. apply (supports_perm _ _ _ Heq).
+    - apply sumList_body_eq. intros a _.
+      apply ratMult_eqRat_compat; [apply Heq | apply eqRat_refl].
+  Qed.
+
+  (* repeatRnd has exactly the iid-uniform distribution of FCF's compMap
+     sampling shape used by HasDups.dupProb. *)
+  Lemma repeatRnd_compMap_pt :
+    forall (q : nat) (idx : list nat),
+      length idx = q ->
+      forall y,
+        evalDist (repeatRnd q) y ==
+        evalDist (compMap (Bvector_EqDec c) (fun _ => {0,1}^c) idx) y.
+  Proof.
+    induction q as [| q IH]; intros idx Hlen y.
+    - destruct idx as [| a idx']; simpl in Hlen.
+      + simpl. apply evalDist_ret_eq. reflexivity.
+      + discriminate.
+    - destruct idx as [| a idx']; simpl in Hlen.
+      + discriminate.
+      + simpl repeatRnd. simpl compMap.
+        apply rel_seq with (rel := eqRat) (x1 := y) (x2 := y).
+        { apply eqRat_RatRel. }
+        { intros d _; eapply bind_ext.
+          intros y'; apply IH. simpl. lia. }
+  Qed.
+
+  (* DupEvent has exactly the distribution of HasDups.dupProb's sampling
+     shape (compMap over an index list of length q). *)
+  Lemma dup_event_eq :
+    forall (q : nat) (idx : list nat),
+      length idx = q ->
+      forall b : bool,
+        evalDist (ls <-$ repeatRnd q; ret (hasDups (Bvector_EqDec c) ls)) b ==
+        evalDist (x <-$ compMap (Bvector_EqDec c)
+                    (fun _ => {0,1}^c) idx;
+                  ret (hasDups (Bvector_EqDec c) x)) b.
+  Proof.
+    intros q idx Hlen b.
+    eapply bind_ext.
+    - intros y. apply repeatRnd_compMap_pt. exact Hlen.
+  Qed.
+
+  (* Chaining dupProb: Pr[collision] <= q^2 / 2^c. *)
+  Corollary dup_event_bound :
+    forall q : nat,
+      evalDist (DupEvent q) true <= (q ^ 2 / 2 ^ c)%rat.
+  Proof.
+    intros q.
+    eapply leRat_trans with
+      (r2 := evalDist
+               (x <-$ compMap (Bvector_EqDec c)
+                          (fun _ => {0,1}^c) (seq 0 q);
+                ret (hasDups (Bvector_EqDec c) x)) true).
+    - unfold DupEvent.
+      apply eqRat_impl_leRat.
+      apply (dup_event_eq q (seq 0 q)); apply length_seq.
+    - eapply leRat_trans with (r2 := (length (seq 0 q) ^ 2 / 2 ^ c)%rat).
+      + apply (dupProb c (seq 0 q)).
+      + apply eqRat_impl_leRat. rewrite length_seq. apply eqRat_refl.
   Qed.
 
 End MaskPRF.
