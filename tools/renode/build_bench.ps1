@@ -1,13 +1,19 @@
 param(
-    [string]$Core = "m0plus",  # m0plus | m3
-    [switch]$SizeOpt           # when set, build with 64-bit-word Ascon (WOLFSSL_ASCON_32BIT undefined)
+    [string]$Core = "m0plus",  # m0plus | m0 | m3 | m4 | m33
+    [switch]$SizeOpt,          # when set, build with 64-bit-word Ascon (WOLFSSL_ASCON_32BIT undefined)
+    [switch]$Dwt               # when set, use pqm4 DWT CYCCNT (-DPQM4_DWT, -O2)
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $gcc = "arm-none-eabi-gcc"
-$mcpu = if ($Core -eq "m0plus") { "cortex-m0plus" } else { "cortex-m3" }
+$mcpuMap = @{ "m0plus"="cortex-m0plus"; "m0"="cortex-m0"; "m3"="cortex-m3"; "m4"="cortex-m4"; "m33"="cortex-m33" }
+if (-not $mcpuMap.ContainsKey($Core)) { Write-Error "Unknown Core '$Core' (expected m0plus|m0|m3|m4|m33)"; exit 1 }
+$mcpu = $mcpuMap[$Core]
 $asconDef = if ($SizeOpt) { "-UWOLFSSL_ASCON_32BIT" } else { "-DWOLFSSL_ASCON_32BIT" }
 $suffix = if ($SizeOpt) { "-sizeopt" } else { "" }
+if ($Dwt) { $suffix += "-dwt" }
+$dwtDef = if ($Dwt) { "-DPQM4_DWT" } else { $null }
+$opt = if ($Dwt) { "-O2" } else { "-Os" }
 
 $defs = @(
     "-DWOLFSSL_USER_SETTINGS",
@@ -26,6 +32,7 @@ $defs = @(
     "-DNO_PWDBASED",
     "-DWOLFSSL_BENCHMARK_FIXED_UNITS_MB", $asconDef
 )
+if ($Dwt) { $defs += $dwtDef }
 $incs = @(
     "-I$root",
     "-I$root\wolfssl",
@@ -56,7 +63,7 @@ $srcs = @(
 
 New-Item -ItemType Directory -Force -Path "$PSScriptRoot\out" | Out-Null
 $gccArgs = @(
-    "-mthumb", "-mcpu=$mcpu", "-mfloat-abi=soft", "-Os", "-ffreestanding", "-nostartfiles", "-fno-builtin",
+    "-mthumb", "-mcpu=$mcpu", "-mfloat-abi=soft", $opt, "-ffreestanding", "-nostartfiles", "-fno-builtin",
     "-Wno-unused-function", "-Wno-unused-variable", "-Wno-comment", "-Wno-attributes",
     "-include", "$PSScriptRoot\bench_stub.h",
     $defs, $incs, $srcs,

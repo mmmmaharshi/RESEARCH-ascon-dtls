@@ -13,11 +13,15 @@
 #include "benchmark.h"
 void record_bench(void);
 
+#ifdef PQM4_DWT
+#include "hal.h"
+#else
 #define SYST_CSR (*(volatile uint32_t*)0xE000E010u)
 #define SYST_RVR (*(volatile uint32_t*)0xE000E014u)
 #define SYST_CVR (*(volatile uint32_t*)0xE000E018u)
 #define CTRL_COUNTFLAG (1u << 16)
 #define CTRL_ENABLE_CLK (0x5u) /* ENABLE | CLKSOURCE */
+#endif
 
 #define HDR_ADDR  0x2003D000u
 #define OUT_ADDR  0x2003E000u
@@ -29,6 +33,10 @@ static volatile char*      out = (volatile char*)OUT_ADDR;
 
 static uint32_t s_wraps;
 static uint32_t s_start;
+
+#ifdef PQM4_DWT
+static uint32_t dwt_start;
+#endif
 
 /* Real heap (nosys _sbrk stub returns ENOMEM). `end` is the heap start
  * symbol from bench.ld (end = __heap_start). Capped below the reserved
@@ -53,6 +61,14 @@ void* _sbrk(ptrdiff_t incr)
 /* benchmark.c calls this via WOLFSSL_CURRTIME_REMAP */
 double bench_current_time(int reset)
 {
+#ifdef PQM4_DWT
+    if (reset) {
+        hal_dwt_enable();
+        dwt_start = hal_cc();
+        return 0.0;
+    }
+    return (double)(hal_cc() - dwt_start) / 32000000.0;
+#else
     if (reset) {
         s_wraps = 0;
         s_start = SYST_CVR;
@@ -65,6 +81,7 @@ double bench_current_time(int reset)
     /* one COUNTFLAG wrap may be missed per read (0.5 s transient),
      * averaged out over the >= 1 s benchmark runs */
     return ((double)s_wraps * 0x1000000u + (double)elapsed) / 32000000.0;
+#endif
 }
 
 /* benchmark.c printf() is remapped to this via XPRINTF */
@@ -93,9 +110,13 @@ int main(void)
     hdr[3] = 0;
     out[0] = 0;
 
+#ifdef PQM4_DWT
+    hal_dwt_enable();
+#else
     SYST_RVR = 0x00FFFFFFu;
     SYST_CVR = 0;
     SYST_CSR = CTRL_ENABLE_CLK;
+#endif
 
     int rc = benchmark_test(NULL);
     record_bench();

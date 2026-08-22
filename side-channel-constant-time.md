@@ -141,15 +141,25 @@ table lookups) and that dudect finds no distinguisher converts the liability int
 a contribution: "we considered the obvious attack on the new mask and it does not
 exist by construction + measurement."
 
-## 5. Valgrind / memcheck note
+## 5. Valgrind / memcheck & cachegrind note
 
 `valgrind --tool=memcheck --track-origins=yes` (secret-dependent branch / address
 detection via memcheck — flags any branch or address derived from undefined
-secret bytes) is the complementary static-dynamic check. On this Windows/MSYS2
+secret bytes) and `valgrind --tool=cachegrind --branch-sim=yes` (cache-timing
+triangulation) are the complementary static-dynamic checks. On this Windows/MSYS2
 host `valgrind` is unavailable; on WSL/Linux copy-paste:
 
 ```sh
+# 64-bit (default) + 32-bit (split-halves) — both arithmetic-only, expected PASS
+gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe && ./tools/ascon_mask_dudect.exe
+gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe
+
+# memcheck: secret-dependent branches/addresses
 wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect.exe
+wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect32.exe
+# cachegrind: branch + cache simulation (triangulation, not cycle-accurate)
+wsl -- valgrind --tool=cachegrind --branch-sim=yes ./tools/ascon_mask_dudect.exe
+wsl -- valgrind --tool=cachegrind --branch-sim=yes ./tools/ascon_mask_dudect32.exe
 # with ct/sn_key marked undefined (VALGRIND_MAKE_MEM_UNDEFINED in a minimal driver),
 # any secret-dependent branch/address is reported as use of undefined value
 ```
@@ -157,7 +167,7 @@ wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect.ex
 The same guarantee is already provided by the code audit above — the binary
 contains no conditional on `s64`/`ct`/`key` in the hot path — so valgrind would
 only confirm the absence of a compiler-introduced secret-dependent optimization.
-This is left as a one-line CI job for the Linux runner.
+This is left as a one-line CI job for the Linux runner (matrix 64-bit + 32-bit, memcheck + cachegrind).
 
 ## 6. Limitations & next steps (honest)
 
@@ -168,12 +178,16 @@ This is left as a one-line CI job for the Linux runner.
 - **Host-specific:** measured on x86-64 with out-of-order, caches, frequency
   scaling. The constant-time claim is architectural (instruction + address trace)
   and therefore holds on Cortex-M0+/M3 (in-order, no caches) *a fortiori*; a
-  Renode cycle-count run would be the direct Cortex-M counterpart (future work —
-  no env in this repo; leave as next-step validation, not run now).
+  Renode cycle-count run would be the direct Cortex-M counterpart. Renode DWT
+  future work: `tools/renode/hal.h` (DEMCR@0xE000EDFC, DWT_CTRL@0xE0001000,
+  DWT_CYCCNT@0xE0001004, `hal_dwt_enable()`/`hal_cc()`) + `build_bench.ps1 -Dwt`
+  (`-DPQM4_DWT -O2`, pqm4-style) is wired but not run in this env — leave as
+  next-step validation (M3/M4/M33; M0+ falls back to SysTick SYST_CVR@0xE000E018).
 - **32-bit path:** `WOLFSSL_ASCON_32BIT` uses the same arithmetic with split halves
   (each 64-bit word as two 32-bit halves, same XOR/ANDNOT/ROTR sequence) — both
-  paths are arithmetic-only and expected PASS. Not measured on this x86-64 host;
-  repro: `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe`. Add as future CI matrix entry (64-bit + 32-bit).
+  paths are arithmetic-only and expected PASS. Repro (64-bit + 32-bit):
+  `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe && ./tools/ascon_mask_dudect.exe`
+  and `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe`. Add as future CI matrix entry (64-bit + 32-bit).
 - **`ForceZero`:** verified to wipe `AsconState s`; its own timing is not part of
   the mask distinguisher (measured interval excludes it only insofar as it is after
   the `rdtsc` window — the wipe itself is outside the mask PRF).
@@ -194,5 +208,7 @@ This is left as a one-line CI job for the Linux runner.
 ---
 *Repro (64-bit):* `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe && ./tools/ascon_mask_dudect.exe`
 *Repro (32-bit):* `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe` (both arithmetic-only, expected PASS; CI matrix 64+32)
-*Valgrind (WSL):* `wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect.exe` (checks secret-dependent branches/addresses via memcheck)
+*Valgrind memcheck (WSL):* `wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect.exe` and `wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect32.exe` (secret-dependent branches/addresses)
+*Valgrind cachegrind (WSL):* `wsl -- valgrind --tool=cachegrind --branch-sim=yes ./tools/ascon_mask_dudect.exe` and `wsl -- valgrind --tool=cachegrind --branch-sim=yes ./tools/ascon_mask_dudect32.exe` (branch + cache triangulation)
+*Renode DWT future work:* `tools/renode/hal.h` + `tools/renode/build_bench.ps1 -Dwt` (`-DPQM4_DWT -O2`); QEMU triangulation `tools/qemu/triangulate.ps1` (not cycle-accurate, triangulation only).
 Log: `tools/ascon_mask_dudect.log`. Static audit: `wolfssl/wolfcrypt/src/ascon.c` `permutation()` + `wc_AsconAEAD128_Mask()`.

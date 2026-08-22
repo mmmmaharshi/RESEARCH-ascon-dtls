@@ -4,6 +4,11 @@
 #include "wolfssl/wolfcrypt/ascon.h"
 #include "wolfssl/wolfcrypt/types.h"
 
+#ifdef PQM4_DWT
+#include "hal.h"
+#define REC_START()        do { rec_t0 = hal_cc(); } while (0)
+#define REC_END_ADD(total) do { (total) += (hal_cc() - rec_t0); } while (0)
+#else
 /* Single-iteration SysTick timer. The Cortex-M SysTick is a 24-bit DOWN
  * counter clocked at the CPU frequency (32 MHz here). For any region shorter
  * than the 24-bit reload period (~0.5 s), the elapsed tick count is exactly
@@ -13,10 +18,12 @@
  * there is no wrap ambiguity. (An earlier whole-loop timer could mis-count a
  * single SysTick reload on a sub-period region, producing a spurious M3
  * record-mask figure.) The throughput benchmark keeps its own bench_current_time().
+ * Fallback for M0+ (no DWT). Under PQM4_DWT use hal_cc() above.
  */
 #define REC_SYST_CVR       (*(volatile uint32_t*)0xE000E018u)
 #define REC_START()        do { rec_t0 = REC_SYST_CVR; } while (0)
 #define REC_END_ADD(total) do { (total) += (rec_t0 - REC_SYST_CVR) & 0x00FFFFFFu; } while (0)
+#endif
 
 #define REC_PT_SZ 32
 #define REC_ITERS 3000

@@ -31,14 +31,16 @@ inside Renode 1.16.1 (`renode.exe` portable), using the bundled
 
 ## Results (MiB/s, higher = better; mean ± std over 10 Renode runs, std = 0.000)
 
-| Algorithm | Cortex-M0+ | Cortex-M3 | M3 / M0+ |
-|---|---:|---:|---:|
-| ASCON-AEAD128 | 0.409 | 0.749 | 1.83× |
-| AES-128-GCM (enc) | 0.071 | 0.166 | 2.34× |
-| ChaCha20-Poly1305 | 0.691 | 2.725 | 3.94× |
-| ChaCha20 | 1.047 | 1.903 | 1.82× |
-| SHA-256 | 0.504 | 0.996 | 1.98× |
-| HMAC-SHA256 | 0.514 | 0.992 | 1.93× |
+| Algorithm | Cortex-M0+ | Cortex-M3 | Cortex-M4 | Cortex-M33 | M3 / M0+ |
+|---|---:|---:|---:|---:|---:|
+| ASCON-AEAD128 | 0.409 | 0.749 | TBD | TBD | 1.83× |
+| AES-128-GCM (enc) | 0.071 | 0.166 | TBD | TBD | 2.34× |
+| ChaCha20-Poly1305 | 0.691 | 2.725 | TBD | TBD | 3.94× |
+| ChaCha20 | 1.047 | 1.903 | TBD | TBD | 1.82× |
+| SHA-256 | 0.504 | 0.996 | TBD | TBD | 1.98× |
+| HMAC-SHA256 | 0.514 | 0.992 | TBD | TBD | 1.93× |
+
+> **Cross-ISA ratio:** The relative ordering and speedup ratios (e.g., Ascon vs AES-GCM, M3/M0+ scaling) are structural — they reflect the algorithms' 32-bit operation mix and the Cortex-M cores' instruction throughput — and are expected to be preserved on M4/M33. Absolute MiB/s and cyc/rec for M4/M33 are placeholders (TBD) until the `tools/renode/run_matrix.ps1` multi-target matrix is executed in Renode; the matrix emits `out/matrix.tsv` per `Repeats` runs. R9 emulation caveat still applies: Renode is an instruction-count emulator, not silicon.
 
 All values are **mean ± std over 10 Renode runs per core**; std = 0.000 for every
 algorithm (Renode is a deterministic emulator — verified with `tools/bench_10x.ps1`).
