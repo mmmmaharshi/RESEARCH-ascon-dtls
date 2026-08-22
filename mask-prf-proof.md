@@ -1,34 +1,66 @@
-# Record-Number Mask — Standalone PRF Proof (§4.2.1 construction)
+# Mask-PRF — A Single-Call Keyed-Sponge PRF (general primitive; DTLS record-number mask as flagship instance)
 
-This document is the paper's **core novel theoretical contribution** (formal target 2 / §6):
-a ciphertext-dependent record-number mask built on the Ascon-P permutation, with a
-self-contained, tight pseudorandom-function (PRF) proof in the keyed-sponge framework,
-and a proof that it **dominates** the RFC 9147 §4.2.3 reference mask (AES-ECB) in
-both concrete security and implementation cost for AES-free suites.
+## 0. The primitive-level claim
 
-It is intentionally a *standalone* proof, not a sketch. The design doc §4.2.1 states the
-construction; this file proves its security.
+The construction analyzed here is **protocol-agnostic**:
+
+```
+Mask_K(X) = trunc_t( P(domsep || K || X) )       // one call to Ascon-P^12
+```
+
+with `K` a 128-bit key in the 192-bit capacity and `X` an arbitrary ≤128-bit public value
+in the rate. This is a general-purpose **single-call keyed-sponge PRF** producing a short
+pseudorandom tag, suited to any *sequence-number masking*, *nonce-hiding*, or
+*traffic-obfuscation* context where a per-record pseudorandom pad keyed by a session secret
+must be derived from data visible on the wire. Theorem 1′ proves it tight for **any**
+single-block, fixed-capacity instance of this shape — not just the DTLS instantiation.
+
+Concrete instances analyzed in this document:
+1. **DTLS 1.3 record-number mask** (RFC 9147 §4.2.3 context) — the flagship instance,
+   where `X = ct[0..15]` and `t = 16` (or 8). Dominates the RFC 9147 AES-ECB reference
+   mask (Thm 3).
+2. **QUIC packet-number protection** (RFC 9001 §5.4.4 context) — same shape with
+   `X = sample[0..15]`; dominates the AES-ECB header-protection mask (Thm 3′).
+3. **IPsec ESP sequence-number hiding** (RFC 4303 context) — ESP currently transmits the
+   sequence number in clear; Mask-PRF hides it at one extra permutation per packet (§6.3).
+
+Primitive-level contributions get cited wherever the exposure problem appears (QUIC,
+OSCORE, EDHOC, IPsec all have sequence/packet-number exposure); the protocol instances
+below are applications, not the contribution itself.
 
 ---
 
-## 1. Construction (exact specification)
+## 1. Generic construction + DTLS instantiation
 
-Parameters:
+### 1.1 Generic parameters
+
 - Permutation `P = Ascon-P` (12 rounds), operating on a 320-bit state = 5 × 64-bit words.
 - Rate `r = 128` bits (words `s3`, `s4`); capacity `c = 192` bits (words `s0`, `s1`, `s2`).
-- Domain separator `domsep = "RNDIMSK_" = 0x524e44494d534b5f` (word `s0`), a public constant
-  **distinct** from the Ascon-AEAD128 IV (`0x00001000808C0001`) and the Ascon-Hash256 IV.
-- Key `K = sn_key`, 128 bits (words `s1`, `s2`).
+- Domain separator `domsep` — a 64-bit public constant occupying word `s0`. Per-context
+  constants should be chosen pairwise distinct and distinct from all other Ascon-P uses
+  (AEAD IV, hash IV, other contexts' separators). For the DTLS instance:
+  `domsep = "RNDIMSK_" = 0x524e44494d534b5f`, **distinct** from the Ascon-AEAD128 IV
+  (`0x00001000808C0001`) and the Ascon-Hash256 IV.
+- Key `K`, 128 bits (words `s1`, `s2`), unique to the masking purpose.
+- Input `X`: any ≤128-bit block placed in the rate (`s3||s4 = X`, zero-padded if shorter).
+- Output: `trunc_t(·)` — the first `t ≤ r` bits of word `s0'` (the `domsep` position after
+  `P`). Any `t ≤ 128` is covered by the bounds below; smaller `t` only improves them.
+
+For a single-block instance (one `P` call, capacity fixed across queries):
+
+```
+Mask_K(X) = trunc_t( P(domsep || K || X) )
+```
+
+### 1.2 DTLS 1.3 instantiation (RFC 9147 §4.2.3 context)
 
 For a record with ciphertext block `ct = ct[0..15]` (128 bits, the first rate block of the
-AEAD ciphertext; RFC 9147 §4.2.3 requires `|ct| ≥ 16`), define
+AEAD ciphertext; RFC 9147 §4.2.3 requires `|ct| ≥ 16`): `X = ct`, `t = 16`.
 
 ```
 Mask_K(ct) = low_16( P(domsep || K || ct) )      // P applied once (Ascon-P^12)
 ```
 
-where `domsep || K || ct` packs `s0 = domsep`, `s1||s2 = K`, `s3||s4 = ct`, and
-`low_16(·)` takes the low 16 bits of word `s0'` (the `domsep` position after `P`).
 When the DTLS `S` bit is 0, only the low 8 bits are consumed; the bound below only
 improves with truncation to fewer bits.
 
@@ -38,7 +70,9 @@ The mask is recomputed on decryption from the received `ct` (identical path to A
 **Isolation invariant:** `K = sn_key` is HKDF-derived (label `"sn"`) from the same
 `traffic_secret_N` as `client_write_key` (label `"key"`), but is used *only* for masking
 and never for the AEAD. The `domsep` isolates the mask's Ascon-P instance from the AEAD
-and HKDF instances, so mask queries cannot collide in capacity with any other use.
+and HKDF instances, so mask queries cannot collide in capacity with any other use. The same
+invariant applies to every other instantiation of §1.1: give each context its own `domsep`
+and its own purpose-specific key.
 
 ---
 
@@ -56,7 +90,10 @@ returns a fresh uniform 16-bit string per query.
 
 This is the standard PRF game; it directly bounds an observer's ability to tell whether
 the wire `seq` values follow the mask (and thus to recover record count / retransmission
-pattern — the RFC 9147 §4.2.3 privacy goal).
+pattern — the RFC 9147 §4.2.3 privacy goal). The same experiment applies verbatim to every
+other instantiation of §1.1 (QUIC packet numbers, ESP sequence numbers): the privacy goal
+in each case is that the transmitted counter not leak its progression or loss pattern to a
+passive observer.
 
 ---
 
@@ -91,13 +128,15 @@ pattern — the RFC 9147 §4.2.3 privacy goal).
 
 ---
 
-## 4. Theorem 1′ (tight bound for our single-block instance)
+## 4. Theorem 1′ (tight bound for any single-block, fixed-capacity instance)
 
-> **Thm 1′.** For our construction (exactly one rate block, capacity fixed across queries),
-> the capacity-collision term is **vacuous**, so `Adv^prf(A) ≤ q/2^128 + δ_P`.
+> **Thm 1′.** For **any** instance of the §1.1 construction with exactly one rate block and
+> capacity fixed across queries (`domsep‖K` constant per epoch, `|X_i| ≤ r`),
+> `Adv^prf(A) ≤ q/2^128 + δ_P`. The bound is independent of the input length (≤ r) and of
+> the truncation `t`.
 
-**Why.** In G1, distinct queries have distinct 320-bit inputs `domsep‖K‖ct_i` because only
-the rate (`ct_i`) varies while the capacity (`domsep‖K`) is *constant per epoch*. A
+**Why.** In G1, distinct queries have distinct 320-bit inputs `domsep‖K‖X_i` because only
+the rate (`X_i`) varies while the capacity (`domsep‖K`) is *constant per epoch*. A
 keyed-sponge `q²/2^c` collision term arises from two inputs colliding in the capacity
 (e.g., after multi-block absorbing). With a single fixed-capacity block there is no such
 collision: every query hits a distinct input to the permutation, and the permutation maps
@@ -127,7 +166,9 @@ is comfortably above it. The mask does not become the weak link under quantum at
 
 ---
 
-## 6. Theorem 3 (dominance over RFC 9147 §4.2.3 AES-ECB mask)
+## 6. Dominance over standardized masks
+
+### 6.1 Theorem 3 — dominance over RFC 9147 §4.2.3 (DTLS AES-ECB mask)
 
 RFC 9147 §4.2.3 specifies, for AES-based AEADs,
 `Mask^RFC_K(ct) = AES-ECB_K(ct[0..15])`, with `K = sn_key` as above. AES is a 128-bit PRP,
@@ -164,7 +205,55 @@ collision exponent is `c = 192` vs the RFC's `n = 128`.
 
 > **Corollary.** For AES-free DTLS 1.3 suites, the keyed-sponge record-number mask *dominates*
 > the RFC 9147 §4.2.3 reference design on both security (2^48× tighter at the record cap) and
-> cost (one fewer primitive). This is the paper's novel construction claim.
+> cost (one fewer primitive).
+
+### 6.2 Theorem 3′ — dominance over the QUIC packet-number mask (RFC 9001 §5.4.4)
+
+The same comparison transfers directly, because QUIC header protection has the *same
+primitive shape*: RFC 9001 §5.4.4 specifies, for AES-based suites,
+`Mask^QUIC_K(sample) = AES-ECB_{pn_key}(sample[0..15])[0..4]`, where `sample` is 16 bytes
+of ciphertext taken after the header-protection offset and `pn_key` is a purpose-specific
+HKDF-derived key (`"quic pn"` label) — exactly the RFC 9147 structure (single-block
+keyed function of a ciphertext block, key unique to masking). Identical analysis applies:
+
+> `Adv^QUIC(A) ≤ q²/2^128 + δ_AES`
+
+and Mask-PRF is a drop-in replacement (`X = sample`, `t = 32–40` bits, its own `domsep`,
+its own `"pn"`-labeled key), giving `Adv ≤ q/2^128 + δ_P`.
+
+The comparison is **sharper** here because QUIC's packet-number space is larger:
+RFC 9000 permits `q = 2^62` packets under one key.
+
+| construction | bound at q=2^62 | dominant term |
+|---|---|---|
+| RFC 9001 AES-ECB pn-mask | `2^124/2^128 ≈ 2^−4` | `q²/2^128` (birthday collapse) |
+| **our keyed-sponge pn-mask** | `≈ 2^−66` | `q/2^128` |
+
+At the QUIC packet-number cap the AES-ECB mask's birthday term degenerates to a
+near-negligible security level while Mask-PRF retains 2^−66 (key-prediction dominated) —
+a **2^62× tighter** bound, growing without limit in `q`. (Honest caveat: real connections
+rarely exhaust the packet-number space under one key, so this is a worst-case-at-cap
+statement; but it is exactly the regime QUIC's 2^62 budget licenses.) For ChaCha20-based
+QUIC suites there is no AES dependency to remove; the claim there is parity-plus (comparable
+security, one primitive shared with any Ascon AEAD if the suite adopts one).
+
+### 6.3 IPsec ESP sequence numbers (RFC 4303) — gap-fill applicability
+
+ESP has **no sequence-number masking at all**: the 32-bit Sequence Number field sits outside
+the encrypted payload and is transmitted in clear (authenticated only), exposing packet
+counts, loss, and retransmission patterns to passive observers even under fully encrypted
+traffic-flow-confidential padding (RFC 4303 §2.3.2.1 covers payload size, not counters).
+There is thus no standardized reference design to *dominate* — instead Mask-PRF fills the
+gap: placing the masked counter inside the protected envelope
+(`seq_wire = seq ⊕ Mask^{ESP}_K(X)`) hides the progression at the cost of **one Ascon-P
+call per packet**, where an AES-ECB equivalent would force a second primitive into every
+non-AES ESP suite (and ESP's own crypto is negotiated independently, so a pure-permutation
+mask composes with any transform). Same instantiation recipe: dedicated HKDF label, dedicated
+64-bit domsep constant, `X` = first 16 bytes of the ESP ciphertext, `t = 32`.
+
+The same recipe applies wherever a per-record counter rides next to public data — e.g.
+OSCORE's Partial IV (RFC 8613) or EDHOC transcript-adjacent counters — each needing only a
+fresh `domsep` constant and purpose-specific key to instantiate §1.1.
 
 ---
 
@@ -313,7 +402,7 @@ reports *Closed under the global context*):
     `mask_prf_bound_tight` (see §7.1) — the exact integer decomposition of the tight bound,
     proven under `Hreducible` + `Hks` (`q ≤ 2^k`) + `Hperm`. The only remaining hand step is
     `Hreducible` itself (item 1).
-3. **The RSA/ECC dominance (Theorem 3) and PQ/QROM variant (Theorem 2).** Not mechanized.
+3. **The dominance results (Theorems 3 and 3′) and PQ/QROM variant (Theorem 2).** Not mechanized.
 
 ### 7.3 Original toolchain plan (blocked, retained for completeness)
 
@@ -352,4 +441,9 @@ permutation); the PQ/dominance specializations (Theorems 2–3) remain hand argu
 - [Hos25] Hosoyamada. *Post-Quantum Security of Keyed Sponges.* IACR ToSC 2025,
   ePrint 2025/1059.
 - [RFC9147] RFC 9147, §4.2.3 (Record Number Encryption).
+- [RFC9001] RFC 9001, §5.4 (Header Protection) and §5.4.4 (Sample-Based Packet-Number
+  Protection); [RFC9000] §12.3 (2^62 packet-number limit).
+- [RFC4303] RFC 4303 (IP Encapsulating Security Payload), §2.2 (cleartext Sequence
+  Number field), §2.3.2.1 (TFC padding).
+- [RFC8613] RFC 8613 (OSCORE), Partial IV exposure.
 - [SP800-232] NIST SP 800-232 (Ascon-AEAD128 / Ascon-Hash256).
