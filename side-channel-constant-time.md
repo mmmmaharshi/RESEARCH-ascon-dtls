@@ -90,8 +90,10 @@ Timing: `rdtsc` serialized with `lfence` before/after the call, `N=80,000` sampl
 per round, up to 8 rounds (~640k measurements per test). Three crops: `p100` (all),
 `p99`, `p90` — standard dudect outlier handling. `WARMUP=5000` stabilizes predictors.
 
-Build: `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c
--Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe` (MSYS2 ucrt64, 14.2.0).
+Build (64-bit, default): `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c
+ -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe` (MSYS2 ucrt64, 14.2.0).
+32-bit repro (same harness, split-halves path — also arithmetic-only, expected
+PASS): `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe` — future CI matrix entry (64+32).
 
 ## 4. Result (negative — publishable)
 
@@ -142,12 +144,14 @@ exist by construction + measurement."
 ## 5. Valgrind / memcheck note
 
 `valgrind --tool=memcheck --track-origins=yes` (secret-dependent branch / address
-detection) is the complementary static-dynamic check. On this Windows/MSYS2 host
-`valgrind` is unavailable; on WSL/Linux it can be run as:
+detection via memcheck — flags any branch or address derived from undefined
+secret bytes) is the complementary static-dynamic check. On this Windows/MSYS2
+host `valgrind` is unavailable; on WSL/Linux copy-paste:
 
-```
-valgrind --tool=memcheck ./tools/ascon_mask_dudect  # or a minimal ct-varying driver
-# with ct and sn_key marked undefined, checks that no branch/address depends on them
+```sh
+wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect.exe
+# with ct/sn_key marked undefined (VALGRIND_MAKE_MEM_UNDEFINED in a minimal driver),
+# any secret-dependent branch/address is reported as use of undefined value
 ```
 
 The same guarantee is already provided by the code audit above — the binary
@@ -164,10 +168,12 @@ This is left as a one-line CI job for the Linux runner.
 - **Host-specific:** measured on x86-64 with out-of-order, caches, frequency
   scaling. The constant-time claim is architectural (instruction + address trace)
   and therefore holds on Cortex-M0+/M3 (in-order, no caches) *a fortiori*; a
-  Renode cycle-count run would be the direct Cortex-M counterpart.
-- **32-bit path:** `WOLFSSL_ASCON_32BIT` uses the same arithmetic with split halves;
-  also data-oblivious, but not measured here (add `CFLAGS=-DWOLFSSL_ASCON_32BIT`
-  build if targeting M0).
+  Renode cycle-count run would be the direct Cortex-M counterpart (future work —
+  no env in this repo; leave as next-step validation, not run now).
+- **32-bit path:** `WOLFSSL_ASCON_32BIT` uses the same arithmetic with split halves
+  (each 64-bit word as two 32-bit halves, same XOR/ANDNOT/ROTR sequence) — both
+  paths are arithmetic-only and expected PASS. Not measured on this x86-64 host;
+  repro: `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe`. Add as future CI matrix entry (64-bit + 32-bit).
 - **`ForceZero`:** verified to wipe `AsconState s`; its own timing is not part of
   the mask distinguisher (measured interval excludes it only insofar as it is after
   the `rdtsc` window — the wipe itself is outside the mask PRF).
@@ -186,7 +192,7 @@ This is left as a one-line CI job for the Linux runner.
   (cryptographic PRF bound vs. implementation leakage).
 
 ---
-*Repro:* `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c
--Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe && ./tools/ascon_mask_dudect.exe`
-Log: `tools/ascon_mask_dudect.log`. Static audit: `wolfssl/wolfcrypt/src/ascon.c`
-`permutation()` + `wc_AsconAEAD128_Mask()`.
+*Repro (64-bit):* `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe && ./tools/ascon_mask_dudect.exe`
+*Repro (32-bit):* `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect32.exe && ./tools/ascon_mask_dudect32.exe` (both arithmetic-only, expected PASS; CI matrix 64+32)
+*Valgrind (WSL):* `wsl -- valgrind --tool=memcheck --track-origins=yes ./tools/ascon_mask_dudect.exe` (checks secret-dependent branches/addresses via memcheck)
+Log: `tools/ascon_mask_dudect.log`. Static audit: `wolfssl/wolfcrypt/src/ascon.c` `permutation()` + `wc_AsconAEAD128_Mask()`.

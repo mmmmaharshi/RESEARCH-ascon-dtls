@@ -18,11 +18,14 @@
  *     and OUT OF SCOPE for this scaffold.
  *
  * WHY THE q^2/2^192 TERM IS NOT MACHINE-CHECKED HERE:
- *   pack k : block -> state  and  proj : state -> block  are abstract. The 192
- *   in q^2/2^192 is the *capacity* of the Ascon sponge and is invisible at this
- *   abstraction. With no rate/capacity model and no permutation internals, no
- *   EasyCrypt derivation can produce a 2^192 denominator — it would have to be
- *   assumed. We therefore DO NOT assert q^2/2^192 as a mechanized consequence.
+ *   pack k : block -> state  and  proj : state -> block  are retained for
+ *   documentation / hand-proof correspondence (RealO.mask = proj(P.pack k ct))
+ *   but the EC scaffold is block-indexed (f=g, §6 Hop2). The injective index
+ *   change ct <-> pack k ct is trivial for concrete bit-vector packing
+ *   (pack_inj, assumed here, proven in Coq FCF: realMask_nodup_eq). With no
+ *   rate/capacity model and no permutation internals, no EasyCrypt derivation
+ *   can produce a 2^192 denominator — it would have to be assumed. We therefore
+ *   DO NOT assert q^2/2^192 as a mechanized consequence.
  *   The mechanized theorem is honestly Adv <= delta_P (the open reduction gap);
  *   the paper's headline number is carried as a *conditional* instantiation
  *   (lemma hand_bound_instantiation) under the explicit assumption that the

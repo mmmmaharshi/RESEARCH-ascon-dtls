@@ -18,6 +18,7 @@
  * Build (MSYS2 ucrt64, from repo root):
  *   gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS \
  *       tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o tools/ascon_mask_dudect.exe
+ * 32-bit path (same harness, expected PASS): add -DWOLFSSL_ASCON_32BIT to CFLAGS
  */
 #include <stdio.h>
 #include <stdint.h>

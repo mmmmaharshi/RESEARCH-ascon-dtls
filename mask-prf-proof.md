@@ -37,10 +37,19 @@ below are applications, not the contribution itself.
 - Permutation `P = Ascon-P` (12 rounds), operating on a 320-bit state = 5 × 64-bit words.
 - Rate `r = 128` bits (words `s3`, `s4`); capacity `c = 192` bits (words `s0`, `s1`, `s2`).
 - Domain separator `domsep` — a 64-bit public constant occupying word `s0`. Per-context
-  constants should be chosen pairwise distinct and distinct from all other Ascon-P uses
-  (AEAD IV, hash IV, other contexts' separators). For the DTLS instance:
-  `domsep = "RNDIMSK_" = 0x524e44494d534b5f`, **distinct** from the Ascon-AEAD128 IV
-  (`0x00001000808C0001`) and the Ascon-Hash256 IV.
+  constants must be pairwise distinct and distinct from all other Ascon-P uses
+  (AEAD IV, hash IV, other contexts' separators).
+
+  **Table 1 — Concrete `domsep` assignments (all distinct from each other and from `0x00001000808C0001`):**
+
+  | context | `domsep` ASCII | hex | HKDF label | `t` | notes |
+  |---|---|---|---|---|---|
+  | DTLS 1.3 record-number (flagship) | `RNDIMSK_` | `0x524E44494D534B5F` | `sn` | 16 | §1.2 |
+  | QUIC packet-number (RFC 9001 §5.4.4) | `QUPNMSK_` | `0x5155504E4D534B5F` | `quic pn` | 32–40 | §6.2; same `sample[0..15]` shape |
+  | IPsec ESP seq-hiding (RFC 4303) | `ESPSNW__` | `0x455350534E575F5F` | `esp sn` | 32 | §6.3; fills cleartext gap |
+  | OSCORE Partial IV (RFC 8613, optional) | `OSCORE__` | `0x4F53434F52455F5F` | `oscore piv` | ≤64 | §6.3 |
+
+  Any new protocol gets a fresh row; isolation requires a fresh `domsep` + purpose-specific key.
 - Key `K`, 128 bits (words `s1`, `s2`), unique to the masking purpose.
 - Input `X`: any ≤128-bit block placed in the rate (`s3||s4 = X`, zero-padded if shorter).
 - Output: `trunc_t(·)` — the first `t ≤ r` bits of word `s0'` (the `domsep` position after
