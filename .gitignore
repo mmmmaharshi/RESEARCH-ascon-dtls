@@ -35,3 +35,4 @@ tools/coq/.lia.cache
 tools/coq/.mask_prf.aux
 
 tools/coq/.*.aux
+tools/easycrypt/*.eco
