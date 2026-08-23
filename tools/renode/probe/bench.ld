@@ -41,8 +41,8 @@ SECTIONS
 
     . = ALIGN(4);
     __heap_start = .;
-    __heap_end = 0x20038000;
+    __heap_end = 0x20008000;
     end = __heap_start;
     __end__ = __heap_start;
-    __stack_top = 0x2003C000;
+    __stack_top = 0x2000C000;
 }

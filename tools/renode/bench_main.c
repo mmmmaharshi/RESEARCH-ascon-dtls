@@ -2,10 +2,11 @@
  * - current_time: SysTick (32 MHz, 24-bit, COUNTFLAG wrap tracking)
  * - printf (XPRINTF): appends to an SRAM buffer read back by the host
  *   after the emulation is paused.
- * Results: header at 0x2003D000 (magic/out_addr/out_len/done),
- *          text at 0x2003E000. Region sits above __stack_top (0x2003C000),
- *          so neither the heap (capped at 0x20038000) nor the stack can
- *          clobber it. SRAM is 256 KB in the .repl to map these addresses. */
+ * Results: header at 0x2000D000 (magic/out_addr/out_len/done),
+ *          text at 0x2000E000. Region sits above __stack_top (0x2000C000),
+ *          so neither the heap (capped at 0x20008000) nor the stack can
+ *          clobber it. SRAM 64K+ (QEMU netduino2 64K, Renode 256K) — low
+ *          addresses fit both; Renode repl is 256K, QEMU netduino2 is 64K. */
 #include <stdint.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -23,8 +24,8 @@ void record_bench(void);
 #define CTRL_ENABLE_CLK (0x5u) /* ENABLE | CLKSOURCE */
 #endif
 
-#define HDR_ADDR  0x2003D000u
-#define OUT_ADDR  0x2003E000u
+#define HDR_ADDR  0x2000D000u
+#define OUT_ADDR  0x2000E000u
 #define OUT_SIZE  8192u
 #define HDR_MAGIC 0x4D303032u /* "M002" */
 
@@ -42,7 +43,7 @@ static uint32_t dwt_start;
  * symbol from bench.ld (end = __heap_start). Capped below the reserved
  * output region / stack so it can't overwrite the result buffer. */
 extern char end;
-#define HEAP_LIMIT 0x20038000u
+#define HEAP_LIMIT 0x20008000u
 void* _sbrk(ptrdiff_t incr)
 {
     static char* heap = NULL;
@@ -121,5 +122,15 @@ int main(void)
     int rc = benchmark_test(NULL);
     record_bench();
     hdr[3] = 1; /* done */
+    /* semihosting exit: ADP_Stopped_ApplicationExit (0x20026) via bkpt 0xAB.
+     * QEMU -semihosting traps this and exits cleanly (avoid timeout idle spin
+     * at startup.s `b 5b`). Fallback wfi loop if semihosting not enabled. */
+    __asm volatile (
+        "movs r0, #0x18\n"
+        "ldr r1, =0x20026\n"
+        "bkpt #0xAB\n"
+        : : : "r0", "r1", "memory"
+    );
+    while (1) { __asm volatile ("wfi"); }
     return rc;
 }

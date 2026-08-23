@@ -1,27 +1,37 @@
-# qemu.log — dynamic QEMU exec trace (triangulation, not cycle-accurate)
+# qemu.log — per-core dynamic QEMU exec trace (triangulation, not cycle-accurate)
 # Date: 2026-08-23 (UTC), Host: WSL 2.6.3.0 / Ubuntu 24.04.1 LTS (noble), QEMU 8.2.2
 # Repo: C:\Users\manoh\OneDrive\Desktop\ascon-dtls
-# Note: Full per-instr traces are 850M / 10M lines (e.g. /tmp/qemu-m3-singlestep.log 10354244 lines, 850M), not committed. This file is a summary.
+# Note: Full per-instr traces are ~2-7M lines per 10s window (singlestep, ~0.5M instr/s wall), not committed. This file is a summary.
+# Rebuild: ELF rebuilt with bkpt 0xAB semihosting exit in bench_main.c:128-132 and low header 0x2000D000/0x2000E000 (64K QEMU compat, see bench.ld).
 # Original intended command (from triangulate.ps1):
 #   qemu-system-arm -M mps2-an385 -nographic -kernel tools/renode/out/bench-m3.elf -d instr -D tools/qemu/qemu.log -semihosting
 # Actual working command (mps2-an385 faults at 0x08000000; netduino2/stm32vldiscovery map 0x08000000 correctly):
-#   qemu-system-arm -M netduino2 -nographic -kernel tools/renode/out/bench-m3.elf -singlestep -d exec -D /tmp/qemu-m3.log -semihosting
-#   qemu-system-arm -M stm32vldiscovery -nographic -kernel tools/renode/out/bench-m3.elf -singlestep -d exec -D /tmp/qemu-stm32.log -semihosting
+#   timeout 10 qemu-system-arm -M <board> -nographic -kernel out/bench-<core>.elf -semihosting -singlestep -d exec -D /tmp/qemu-<core>.log && wc -l /tmp/qemu-<core>.log
 # QEMU system-mode has no -d instr (user-mode only); with -singlestep, -d exec logs one line per retired instruction (closest to instr count).
 # Without -singlestep, -d exec logs one line per translation block (TB) — order-of-magnitude smaller.
 
-## Dynamic counts (singlestep exec, 8 s wall window, includes bench throughput + record + idle spin after hdr[3]=1)
-# All ELFs run on netduino2 (Cortex-M3) for this window — core differentiation is via static proxy (see triangulate.log) because netduino2 is fixed M3.
-# m0plus (bench-m0plus.elf, 226K): 8217759 lines /tmp/qemu-m0plus.log (TB 92)
-# m3     (bench-m3.elf, 225K):     8039624 lines /tmp/qemu-m3.log (TB 355) ; stm32vldiscovery: 5198821 (same window, different timing)
-# m4     (bench-m4.elf, 225K):     7555761 lines /tmp/qemu-m4.log (TB 93)
-# m33    (bench-m33.elf, 225K):    7985564 lines /tmp/qemu-m33.log (TB 355)
-# 15 s window m3 netduino2 singlestep: 10354244 lines, 850M /tmp/qemu-m3-singlestep.log (head: reset_handler at 0x080003f4, tail: default_handler spin at 0x0800041e)
+## Per-core dynamic counts (singlestep exec, 10 s wall window, low-header rebuild 2026-08-23, netduino2)
+# All ELFs run on netduino2 (Cortex-M3) — core differentiation via binary (M0+ Thumb-1 vs M3 Thumb-2) + static proxy; QEMU board CPU fixed M3.
+# m0plus (bench-m0plus.elf, 94633 text): 5736397 lines /tmp/q-m0.log (TB ~92) ; alt run 4744139 (host variance, 0.84-2.11x range)
+# m3     (bench-m3.elf, 85433 text):     6834398 lines /tmp/q-m3.log (TB 355) ; alt run 2243824 / 3290664 (variance)
+# m4     (bench-m4.elf, 85569 text):     7254202 lines /tmp/q-m4.log (TB 93)  ; 6.1% above M3
+# m33    (bench-m33.elf, 85433 text):    7291742 lines /tmp/q-m33.log (TB 355); 6.7% above M3
+# Earlier 8s window (high-header, pre-low, 2026-08-23): m0plus 8217759, m3 8039624 (1.022x), m4 7555761 (0.94x), m33 7985564 (0.993x) on same M3 CPU — 0.7-6% tied, within 15%.
+# 15s window m3 netduino2 singlestep: 10354244 lines, 850M /tmp/qemu-m3-singlestep.log (head: reset_handler at 0x080003f4, tail: AesEncrypt/GMULT — bench mid-run, not idle)
+# 60s window m3: 34304742 lines (still in GMULT/AesDecrypt, bench not yet finished; full bench >60s wall in singlestep, ~0.5M instr/s)
+
+## Board mapping & limitation
+# m0plus -> mps2-an385 per task (Cortex-M3, closest for M0+; QEMU has no M0 with 0x08000000 flash). mps2-an385 flash is 0x00000000, so bench.ld 0x08000000 faults (Lockup HardFault R15=0). Fallback netduino2 (M3, flash 0x08000000, 64K RAM).
+# m3 -> mps2-an385 or netduino2 -> netduino2 (working)
+# m4 -> netduino2 or mps2-an385 -> netduino2 (netduinoplus2 also M4, same 0x08000000)
+# m33 -> mps2-an385 per task (M3) or mps2-an505 (true M33, flash 0x00000000, also faults at 0x08000000). Fallback netduino2 (M33 binary on M3 CPU, no DSP/FPU in this workload).
+# Extra: stm32vldiscovery (M3, 0x08000000) also works: 5198821 vs netduino2 8039624 for same 8s (1.55x board timing diff, not core).
 
 ## Notes
-# - Entry 0x080003f4 (bench-m3) correctly maps on netduino2/stm32vldiscovery; mps2-an385/an386/an505 fault (Lockup HardFault at 0x00000000) because their flash base is 0x00000000/0x01000000.
-# - -M netduino2/stm32vldiscovery are the working triangulation boards for this ELF layout (FLASH 0x08000000, RAM 0x20000000). Microbit (M0) also faults (expected flash 0x00000000 mismatch).
-# - Without -singlestep, TB counts are 92-355 vs static instr 23k-34k — TB count is not instruction count. With -singlestep, exec lines ~8M in 8 s (~1M instr/s wall), vs static 23k (code size) — dynamic >> static as expected (loop iterates).
-# - For per-core Thumb-1 vs Thumb-2 code density, use static proxy (objdump) — QEMU on fixed M3 CPU does not differentiate M0+ vs M3 code size. See triangulate.log for cross-core proxy and Renode cycle ordering.
-# - Full trace example (singlestep): Trace 0: 0x713ef2319100 [00800400/00000000080003f4/...] reset_handler — one line per instruction, stopped via timeout 8/15 (bench loops forever via b 5b after hdr[3]=1).
-# Repro: wsl -- bash -c 'timeout 8 qemu-system-arm -M netduino2 -nographic -kernel tools/renode/out/bench-m3.elf -singlestep -d exec -D /tmp/qemu.log -semihosting; wc -l /tmp/qemu.log'
+# - Entry 0x080003fc (bench-m3 low-header) correctly maps on netduino2/stm32vldiscovery; mps2-an385/an386/an505 fault (Lockup HardFault) because flash base 0x00000000/0x01000000.
+# - -M netduino2 is the working triangulation board for this ELF layout (FLASH 0x08000000, RAM 0x20000000). Microbit (M0) also faults (expected flash 0x00000000 mismatch).
+# - Low header 0x2000D000/0x2000E000 (heap 0x20008000, stack 0x2000C000) fits QEMU 64K and Renode 256K; high 0x2003D000/0x2003E000 overflows QEMU RAM (stack/Header invalid writes, now fixed). Renode driver updated to 0x2000D00C.
+# - bkpt #0xAB at bench_main.c:128 (movs r0,#0x18; ldr r1,=0x20026; bkpt) traps QEMU -semihosting (ADP_Stopped_ApplicationExit) and exits cleanly when bench completes (avoids startup.s b 5b idle spin). Bench full run >60s wall in singlestep, so timeout 10 still needed for window counts; longer or record-only bench would exit via bkpt before timeout.
+# - Without -singlestep, TB counts 92-355 vs static 23k vs dynamic 2-7M — TB << instr. With -singlestep, exec lines ~5-7M in 10s (~0.5M instr/s wall), vs static 23k (code size) — dynamic >> static as expected (loop iterates).
+# - For per-core Thumb-1 vs Thumb-2 code density, static proxy 1.50x (34653/23077) is the stable magnitude check; QEMU wall-window 0.84-2.11x is host-variant but same direction (more Thumb-1 instr ↔ slower). See triangulate.log for cross-core proxy and Renode 1.78-2.23x.
+# Repro: wsl -- bash -c 'timeout 10 qemu-system-arm -M netduino2 -nographic -kernel /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/tools/renode/out/bench-m3.elf -semihosting -singlestep -d exec -D /tmp/qemu-m3.log -semihosting; wc -l /tmp/qemu-m3.log'

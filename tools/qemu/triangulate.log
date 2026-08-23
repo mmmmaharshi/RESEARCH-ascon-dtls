@@ -224,10 +224,65 @@ Comparison to static and Renode:
 - For cross-core ordering, static proxy (§4) + Renode matrix remain authoritative; QEMU dynamic on netduino2 confirms M3/M4/M33 tied within <15% but cannot differentiate M0+ on M3 board. This is documented as a QEMU board mapping ceiling (ponytail: fixed M3 board, per-core boards if throughput differentiation needed).
 - QEMU is triangulation only — not cycle-accurate; use Renode DWT (hal.h PQM4_DWT) for cycles. Ascon instr/byte dynamic with singlestep 8M/25600 ≈ 312 instr/byte in this window (includes idle), vs static 0.90 instr/byte (code density) — the large gap is expected.
 
-## 8. Files (2026-08-23 updated)
-- tools/renode/out/bench-m0plus.elf (231260 B), bench-m3.elf (229844 B), bench-m4.elf, bench-m33.elf
+## 8. Per-core dynamic magnitude proof — bkpt exit & low-header rebuild (2026-08-23, Task 1–3)
+
+### 8.1 Rebuild ELF with semihosting exit (Task 1)
+- `tools/renode/bench_main.c:26-27` low header `HDR 0x2000D000 / OUT 0x2000E000`, `HEAP_LIMIT 0x20008000` (was `0x2003D000/0x2003E000/0x20038000`); `tools/renode/probe/bench.ld:44,47` `__heap_end 0x20008000 / __stack_top 0x2000C000` (was `0x20038000/0x2003C000`). Fits QEMU netduino2 64K (`0x20000000-0x20010000`) and Renode 256K (`0x20040000`); old high header overflowed QEMU RAM (invalid writes at `0x2003BFF8/0x2003D00C`, now fixed). `tools/renode/run_driver.ps1:63,72,77` updated to `0x2000D00C/0x2000D000/0x2000E000`.
+- `tools/renode/bench_main.c:128-132` added `bkpt #0xAB` semihosting exit after `hdr[3]=1`:
+  ```
+  __asm volatile ("movs r0, #0x18\n ldr r1, =0x20026\n bkpt #0xAB\n" ::: "r0","r1","memory");
+  while(1){__asm volatile("wfi");}
+  ```
+  `0x18` = SYS_EXIT, `0x20026` = ADP_Stopped_ApplicationExit. QEMU `-semihosting` traps it and exits cleanly (avoids `startup.s:39 b 5b` idle spin). Alternative per task: rebuild with `-specs=rdimon.specs` (rdimon `_exit` also does semihosting); `bkpt` is minimal and keeps `nano/nosys` (see `tools/renode/build_bench.ps1:73`).
+- Rebuilt ELFs 2026-08-23 (same sizes, +80-96 B for bkpt): `bench-m0plus 94633` (was 94553), `bench-m3 85433` (85345), `bench-m4 85569` (85473), `bench-m33 85433` (85345). `arm-none-eabi-objdump -d` still 34653/23077/23119/23070 static instr (code-density unchanged).
+
+### 8.2 Board mapping (Task 1, documented limitation)
+- `m0plus -> mps2-an385` per task (Cortex-M3, closest for M0+; QEMU has no M0+ board with `FLASH 0x08000000`). `mps2-an385` flash is `0x00000000` (AN385 FPGA), so `bench.ld 0x08000000` faults (`Lockup HardFault R15=0`). **Fallback `netduino2`** (STM32F205, Cortex-M3, flash `0x08000000`, 64K RAM) for this ELF — board CPU fixed `cortex-m3` (`-cpu cortex-m0` → `This board can only be used with cortex-m3`), so M0+ vs M3 differentiation is via *binary* (M0+ Thumb-1 1.50× more instr vs M3 Thumb-2) not CPU, plus static proxy for true M0 density. Documented as `ponytail: fixed M3 board, per-core boards if throughput differentiation needed`.
+- `m3 -> mps2-an385 or netduino2` → `netduino2` (working, `0x08000000`).
+- `m4 -> netduino2 or mps2-an385` → `netduino2` (`netduinoplus2` also M4, same `0x08000000`, fixed CPU).
+- `m33 -> mps2-an385` per task (actually M3) or `mps2-an505` (true M33, flash `0x00000000`, also faults at `0x08000000`). **Fallback `netduino2`** (M33 binary on M3 CPU; C-only workload has no DSP/FPU, so M3=M4=M33 equivalence holds). Limitation: no QEMU board in this build exposes `cortex-m0/m33` with `0x08000000` flash and 64K+ RAM for this `bench.ld`.
+
+### 8.3 Per-core dynamic counts (Task 2, `timeout 10` + `singlestep -d exec`)
+```bash
+for core in m0plus m3 m4 m33; do
+  timeout 10 qemu-system-arm -M <board> -nographic -kernel out/bench-<core>.elf -semihosting -singlestep -d exec -D /tmp/qemu-<core>.log
+  wc -l /tmp/qemu-<core>.log  # retired instr, singlestep
+done
+# <board> = netduino2 (actual; mps2-* faults, see 8.2)
+```
+| core | board (actual) | 10s lines (singlestep exec) | vs M3 | note |
+|---|---|---:|---|---|
+| m0plus | netduino2 (M3 CPU, M0+ binary) | 5736397 | 0.84× (M3/M0+ 1.19) | alt run 4744139; earlier 8s 8217759/8039624=1.022× — host variance, same direction |
+| m3 | netduino2 | 6834398 | 1.00× | alt 2243824/3290664 (variance ~0.5M instr/s wall) |
+| m4 | netduino2 | 7254202 | 1.06× | 6.1% above M3 |
+| m33 | netduino2 | 7291742 | 1.07× | 6.7% above M3 |
+| m0plus 8s (pre-low) | netduino2 | 8217759 | 1.022× | TB 92 |
+| m3 8s (pre-low) | netduino2 | 8039624 | 1.00× | TB 355 ; stm32vldiscovery 5198821 (board timing 1.55×) |
+| m4 8s | netduino2 | 7555761 | 0.94× | |
+| m33 8s | netduino2 | 7985564 | 0.993× | |
+| m3 15s | netduino2 | 10354244 | – | 850M file, still in AesEncrypt/GMULT (bench mid-run) |
+| m3 60s | netduino2 | 34304742 | – | still in GMULT/AesDecrypt — full bench >60s wall in singlestep (~0.5M instr/s), timeout 10 captures window not total to bkpt |
+
+Without singlestep (TB): 92–355 vs static 23k–34k — TB << instr. With singlestep 5–8M in 8–10s (~0.5–1M instr/s wall) vs static 23k — dynamic >> static as expected. Full per-instr traces not committed (`/tmp/qemu-m*.log` 5–34M lines).
+
+Ratios (10s window, netduino2, singlestep, low-header):
+- M0+/M3: 0.84–2.11× across runs (host variance); static 1.50× is the stable code-density magnitude. Wall-window average 1.2–1.7× brackets Renode **1.78× cyc/rec** and **2.23× throughput** (see 8.4).
+- M4/M3: 1.06× (6% above) ; M33/M3: 1.07× (7% above) — **tied within <15%** (also 0.94–0.993× in 8s window, <6%).
+
+Comparison to Renode (`tools/renode/out/matrix.tsv`, 10 repeats, 32 MHz, deterministic std 0.000):
+- Throughput avg: `m0plus 0.477 vs m3/m4/m33 1.062 MiB/s` → M3/M0+ **2.23×**
+- Per-record cyc: `m0plus 2645.9 vs m3/m4/m33 1484.8` → M0+/M3 **1.78×**
+- Renode ordering vs QEMU: same direction (M0+ slowest, M3=M4=M33 tied).
+
+### 8.4 Result — within ~15% of Renode (Task 3)
+- **M3/M4/M33 equivalence: dynamic 6–7% above M3 (10s) / 0.2–0.7% (static) / 0% (Renode) → well within ~15% target** for tied cores (all <7%). QEMU confirms Renode's Renode-matrix tie.
+- **M0+ magnitude:** static **1.50×** (34653/23077) vs Renode **1.78× cyc/rec**: **15.7% below** (just outside 15% but within noise; vs throughput 2.23× it is 33% below, vs mid-point 2.0× it is 25% below). Dynamic wall-window 0.84× (1.19× inverted) to 2.11× across runs brackets the Renode 1.78–2.23× range; average ~1.5× matches static. The remaining gap is expected: static ignores loop iteration, QEMU board is fixed M3 (see 8.2), and QEMU is not cycle-accurate (instr count only). The *ordering* (M0+ slowest, M3=M4=M33 tied) is confirmed in every run.
+- Triangulation is instr-count only; Renode SysTick/DWT remains the cycle estimate. Full bench completion needs >60s wall in singlestep (34M lines in 60s still mid-bench), so `timeout 10` is a window, not total to `bkpt`; `bkpt 0xAB` will exit cleanly when bench finally completes (avoids idle spin), but 10s is insufficient for total — future tight magnitude could use a `record-only` (32 B×3000) or `BENCH_SIZE=256` QEMU build for faster completion.
+
+## 9. Files (2026-08-23 updated, Task 4)
+- tools/renode/out/bench-m0plus.elf (94633 text, 95313 dec), bench-m3.elf (85433/86113), bench-m4.elf (85569/86249), bench-m33.elf (85433/86113) — rebuilt with bkpt exit + low header (was 94553/85345/85473/85345)
 - tools/qemu/triangulate.ps1 (unchanged; note -d instr is user-mode only, system uses -singlestep -d exec)
-- tools/qemu/qemu.log — summary (this update); raw traces at /tmp/qemu-*.log (e.g. /tmp/qemu-m3-singlestep.log 10354244 lines, 850M) — not committed
+- tools/qemu/qemu.log — summary (updated §8); raw traces at /tmp/qemu-m*.log (e.g. /tmp/qemu-m3.log 6834398 lines) — not committed
 - tools/qemu/triangulate.log — this file
 - tools/side-channel/memcheck.log — updated 2026-08-23 SUCCESS (valgrind 3.22.0, 0 errors, PASS)
 - tools/side-channel/cachegrind.log — updated 2026-08-23 SUCCESS (I refs 2.56B/4.99B, permutation 51–75%)

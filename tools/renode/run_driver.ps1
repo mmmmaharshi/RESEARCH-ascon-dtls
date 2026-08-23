@@ -60,7 +60,7 @@ try {
     while ($done -eq 0 -and $sw.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
         Start-Sleep -Seconds 5
         Send-Cmd "pause"
-        $done = Read-HexWord "0x2003D00C"
+        $done = Read-HexWord "0x2000D00C"
         if ($done -eq 0) { Send-Cmd "start" }
     }
     $sw.Stop()
@@ -69,12 +69,12 @@ try {
         Write-Output "WARN: done=0 after ${TimeoutSeconds}s; dumping partial SRAM output (best-effort)"
     }
 
-    $magic  = Read-HexWord "0x2003D000"
-    $outLen = Read-HexWord "0x2003D008"
+    $magic  = Read-HexWord "0x2000D000"
+    $outLen = Read-HexWord "0x2000D008"
     Write-Output "magic=0x$($magic.ToString('X8')) outLen=$outLen elapsed=$($sw.Elapsed.TotalSeconds)s"
 
     $dumpLen = if ($outLen -gt 0) { $outLen } else { 4096 }
-    Send-Cmd "sysbus ReadBytes 0x2003E000 $dumpLen"
+    Send-Cmd "sysbus ReadBytes 0x2000E000 $dumpLen"
     $dump = Rcv
     $bytes = [regex]::Matches($dump, "0x([0-9a-fA-F]{2})") | ForEach-Object { [Convert]::ToByte($_.Groups[1].Value, 16) }
     $text = [System.Text.Encoding]::ASCII.GetString([byte[]]$bytes)
