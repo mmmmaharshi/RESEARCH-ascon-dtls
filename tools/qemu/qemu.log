@@ -1,11 +1,27 @@
-# qemu.log — placeholder (QEMU not installed, proxy used)
-# See triangulate.log for full details and reproduction commands.
-# Date: 2026-08-22
-# Intended command (system-mode, per core):
-#   wsl qemu-system-arm -M mps2-an385 -nographic -kernel tools/renode/out/bench-m3.elf -d instr -D tools/qemu/qemu.log -semihosting
-#   or via PowerShell: .\tools\qemu\triangulate.ps1 -Elf tools/renode/out/bench-m3.elf -QemuLog tools/qemu/qemu.log
-# Repro when QEMU available: wsl sudo apt update && sudo apt install -y qemu-system-arm qemu-user
-# Status: QEMU not available in WSL (which qemu-system-arm -> not found, apt install TIMEOUT), so no dynamic -d instr trace was produced.
-# Proxy instr counts (static, arm-none-eabi-objdump -d) are in triangulate.log:
-#   bench-m0plus 34653, bench-m3 23077, bench-m4 23119, bench-m33 23070 static instr
-#   ordering: M0+ > M3 ~= M4 ~= M33, matching Renode 0.477 vs 1.062 MiB/s (M0+ slowest, M3/M4/M33 tied)
+# qemu.log — dynamic QEMU exec trace (triangulation, not cycle-accurate)
+# Date: 2026-08-23 (UTC), Host: WSL 2.6.3.0 / Ubuntu 24.04.1 LTS (noble), QEMU 8.2.2
+# Repo: C:\Users\manoh\OneDrive\Desktop\ascon-dtls
+# Note: Full per-instr traces are 850M / 10M lines (e.g. /tmp/qemu-m3-singlestep.log 10354244 lines, 850M), not committed. This file is a summary.
+# Original intended command (from triangulate.ps1):
+#   qemu-system-arm -M mps2-an385 -nographic -kernel tools/renode/out/bench-m3.elf -d instr -D tools/qemu/qemu.log -semihosting
+# Actual working command (mps2-an385 faults at 0x08000000; netduino2/stm32vldiscovery map 0x08000000 correctly):
+#   qemu-system-arm -M netduino2 -nographic -kernel tools/renode/out/bench-m3.elf -singlestep -d exec -D /tmp/qemu-m3.log -semihosting
+#   qemu-system-arm -M stm32vldiscovery -nographic -kernel tools/renode/out/bench-m3.elf -singlestep -d exec -D /tmp/qemu-stm32.log -semihosting
+# QEMU system-mode has no -d instr (user-mode only); with -singlestep, -d exec logs one line per retired instruction (closest to instr count).
+# Without -singlestep, -d exec logs one line per translation block (TB) — order-of-magnitude smaller.
+
+## Dynamic counts (singlestep exec, 8 s wall window, includes bench throughput + record + idle spin after hdr[3]=1)
+# All ELFs run on netduino2 (Cortex-M3) for this window — core differentiation is via static proxy (see triangulate.log) because netduino2 is fixed M3.
+# m0plus (bench-m0plus.elf, 226K): 8217759 lines /tmp/qemu-m0plus.log (TB 92)
+# m3     (bench-m3.elf, 225K):     8039624 lines /tmp/qemu-m3.log (TB 355) ; stm32vldiscovery: 5198821 (same window, different timing)
+# m4     (bench-m4.elf, 225K):     7555761 lines /tmp/qemu-m4.log (TB 93)
+# m33    (bench-m33.elf, 225K):    7985564 lines /tmp/qemu-m33.log (TB 355)
+# 15 s window m3 netduino2 singlestep: 10354244 lines, 850M /tmp/qemu-m3-singlestep.log (head: reset_handler at 0x080003f4, tail: default_handler spin at 0x0800041e)
+
+## Notes
+# - Entry 0x080003f4 (bench-m3) correctly maps on netduino2/stm32vldiscovery; mps2-an385/an386/an505 fault (Lockup HardFault at 0x00000000) because their flash base is 0x00000000/0x01000000.
+# - -M netduino2/stm32vldiscovery are the working triangulation boards for this ELF layout (FLASH 0x08000000, RAM 0x20000000). Microbit (M0) also faults (expected flash 0x00000000 mismatch).
+# - Without -singlestep, TB counts are 92-355 vs static instr 23k-34k — TB count is not instruction count. With -singlestep, exec lines ~8M in 8 s (~1M instr/s wall), vs static 23k (code size) — dynamic >> static as expected (loop iterates).
+# - For per-core Thumb-1 vs Thumb-2 code density, use static proxy (objdump) — QEMU on fixed M3 CPU does not differentiate M0+ vs M3 code size. See triangulate.log for cross-core proxy and Renode cycle ordering.
+# - Full trace example (singlestep): Trace 0: 0x713ef2319100 [00800400/00000000080003f4/...] reset_handler — one line per instruction, stopped via timeout 8/15 (bench loops forever via b 5b after hdr[3]=1).
+# Repro: wsl -- bash -c 'timeout 8 qemu-system-arm -M netduino2 -nographic -kernel tools/renode/out/bench-m3.elf -singlestep -d exec -D /tmp/qemu.log -semihosting; wc -l /tmp/qemu.log'

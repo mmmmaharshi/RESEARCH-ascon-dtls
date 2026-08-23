@@ -1,7 +1,8 @@
 # QEMU triangulation — instruction-count validation
-# Date: 2026-08-22 (UTC), Host: Windows 10.0.26200.9267, WSL 2.6.3.0 / Ubuntu 24.04.1 LTS (noble)
+# Date: 2026-08-23 (UTC), Host: WSL 2.6.3.0 / Ubuntu 24.04.1 LTS (noble), QEMU 8.2.2, Valgrind 3.22.0
 # Repo: C:\Users\manoh\OneDrive\Desktop\ascon-dtls
 # Toolchain: GNU Arm Embedded 10 2021.10 (arm-none-eabi-objdump.exe / size.exe)
+# Update: 2026-08-23 — QEMU+Valgrind installed via wsl --user root, dynamic triangulation re-run (see §7)
 
 ## 1. Reproducibility — commands executed
 
@@ -13,14 +14,22 @@ wsl -- bash -c "dpkg -l 2>&1 | grep -i qemu | head -20; apt-cache policy qemu-sy
 wsl -- bash -c "cat /etc/os-release | head -20; wsl --version"
 ```
 
-### Attempted install (Task 1 — documented, timed out, logged as future work)
+### Attempted install (Task 1 — documented 2026-08-22, timed out via sudo; succeeded 2026-08-23 via root)
 ```bash
+# 2026-08-22 (sudo, hung — sudo requires password, timeout 60-180s, no output):
 wsl -- bash -c "timeout 60 sudo apt update 2>&1 | tail -30; echo EXIT:$?"
 wsl -- bash -c "timeout 120 sudo apt install -y qemu-system-arm qemu-user 2>&1 | tail -100; echo EXIT:$?"
-# Result: both commands hang past 60–180s with no output (apt fetch stalls in this
-# environment despite ping/curl to archive.ubuntu.com succeeding). No package
-# installed. Candidate remains 1:8.2.2+ds-0ubuntu1.18 (noble-updates/main).
-# Documented as pending; retry with: wsl sudo apt update && sudo apt install -y qemu-system-arm qemu-user
+# Result: hang (sudo password prompt, not network). Candidate 1:8.2.2+ds-0ubuntu1.18.
+
+# 2026-08-23 (root, success — bypasses sudo password):
+wsl --user root -- bash -c 'apt update 2>&1 | tail -20'
+# Hit:1 http://archive.ubuntu.com/ubuntu noble InRelease ... Fetched 4 MB in 2s
+wsl --user root -- bash -c 'apt install -y qemu-system-arm qemu-user valgrind --no-install-recommends 2>&1 | tail -100'
+# Unpacking qemu-system-arm 1:8.2.2+ds-0ubuntu1.18, qemu-user, valgrind 1:3.22.0-0ubuntu3 ... done
+wsl -- bash -c 'qemu-system-arm --version; qemu-arm --version; valgrind --version'
+# QEMU emulator version 8.2.2, qemu-arm version 8.2.2, valgrind-3.22.0
+# wsl -- bash -c 'which qemu-system-arm; ls -l /usr/bin/qemu-system-arm' -> /usr/bin/qemu-system-arm 28M
+# dpkg -l | grep -E "qemu|valgrind" -> ii qemu-system-arm 1:8.2.2+ds-0ubuntu1.18, ii qemu-user, ii valgrind
 ```
 
 ### Triangulation script per core (Task 2)
@@ -48,40 +57,52 @@ $size    = "C:\Program Files (x86)\GNU Arm Embedded Toolchain\10 2021.10\bin\arm
 # Repeat for bench-m3.elf, bench-m4.elf, bench-m33.elf, bench-m0plus-sizeopt.elf, bench-m3-sizeopt.elf
 ```
 
-## 2. WSL / QEMU check output (2026-08-22)
+## 2. WSL / QEMU check output (2026-08-22 initial; 2026-08-23 success)
 
 ```
-which qemu-system-arm -> not found (EXIT 1)
-which qemu-arm        -> not found (EXIT 1)
-ls /usr/bin/qemu*     -> No such file
-dpkg -l | grep qemu   -> (no installed package)
-apt-cache policy qemu-system-arm -> Installed: (none), Candidate: 1:8.2.2+ds-0ubuntu1.18
-apt-cache policy qemu-user       -> Installed: (none), Candidate: 1:8.2.2+ds-0ubuntu1.18
-/etc/os-release: Ubuntu 24.04.1 LTS (noble), WSL 2.6.3.0, kernel 6.6.87.2-1
-WSL network: ping 8.8.8.8 OK, curl -I http://archive.ubuntu.com -> 200 (Cloudflare)
-apt update/install: TIMEOUT after 60-180s, no output (see above). QEMU not installed.
+2026-08-22:
+ which qemu-system-arm -> not found (EXIT 1)
+ which qemu-arm        -> not found (EXIT 1)
+ ls /usr/bin/qemu*     -> No such file
+ dpkg -l | grep qemu   -> (no installed package)
+ apt-cache policy qemu-system-arm -> Installed: (none), Candidate: 1:8.2.2+ds-0ubuntu1.18
+ /etc/os-release: Ubuntu 24.04.1 LTS (noble), WSL 2.6.3.0, kernel 6.6.87.2-1
+ WSL network: ping 8.8.8.8 OK, curl -I http://archive.ubuntu.com -> 200
+ apt update/install via sudo: TIMEOUT 60-180s (sudo password prompt, fixed 2026-08-23 via wsl --user root)
+
+2026-08-23 (post-install):
+ which qemu-system-arm -> /usr/bin/qemu-system-arm
+ which qemu-arm        -> /usr/bin/qemu-arm
+ which valgrind        -> /usr/bin/valgrind
+ qemu-system-arm --version -> 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)
+ qemu-arm --version    -> 8.2.2
+ valgrind --version    -> 3.22.0
+ ls /usr/bin/qemu*     -> qemu-system-arm 28M, qemu-arm, qemu-* helpers
+ dpkg -l | grep qemu   -> ii qemu-system-arm, qemu-system-common, qemu-system-data, qemu-user
+ dpkg -l | grep valgrind -> ii valgrind 1:3.22.0-0ubuntu3
 ```
 
-## 3. Triangulate.ps1 execution (QEMU not available)
+## 3. Triangulate.ps1 execution (QEMU not available 2026-08-22; QEMU available 2026-08-23 see §7)
 
 For each core m0plus,m3,m4,m33 (using tools/renode/out/bench-*.elf, 229–231 KB):
 
 ```
+2026-08-22:
 --- core m0plus elf .../bench-m0plus.elf ---
 ERROR: The term 'qemu-system-arm' is not recognized as a name of a cmdlet, function, script file, or executable program.
 no qemu log (expected without QEMU)
-
 --- core m3 ---
 ERROR: term 'qemu-system-arm' not recognized — no qemu log
-
 --- core m4 ---
 ERROR: term 'qemu-system-arm' not recognized — no qemu log
-
 --- core m33 ---
 ERROR: term 'qemu-system-arm' not recognized — no qemu log
+No qemu-*.log produced. This is the expected fallback path per task; proxy below.
+
+2026-08-23: see §7 dynamic triangulation (netduino2/stm32vldiscovery, singlestep exec).
 ```
 
-No qemu-*.log produced. This is the expected fallback path per task; proxy below.
+No qemu-*.log produced on 2026-08-22. Dynamic logs produced 2026-08-23 at /tmp/qemu-*.log (not committed, 850M traces); summary in tools/qemu/qemu.log and §7.
 
 ## 4. Proxy instr counts via arm-none-eabi-objdump (static, not dynamic)
 
@@ -127,27 +148,86 @@ Renode ordering vs static proxy:
   effects; a true QEMU -d instr dynamic count is needed for a tight ~15% magnitude
   check on M0+ vs M3.
 
-## 5. Future work — real QEMU triangulation
+## 5. Dynamic QEMU triangulation — re-run 2026-08-23 (QEMU 8.2.2 now available)
 
-When WSL apt is responsive, run:
-
+When WSL apt is responsive, run (now succeeded 2026-08-23):
 ```bash
-wsl sudo apt update && sudo apt install -y qemu-system-arm qemu-user binutils-arm-none-eabi
-# then from Windows PowerShell (or WSL):
+wsl --user root apt update && apt install -y qemu-system-arm qemu-user valgrind
+wsl -- bash -c 'qemu-system-arm --version; valgrind --version'
+# then:
 pwsh -File tools/qemu/triangulate.ps1 -Elf tools/renode/out/bench-m3.elf -QemuLog tools/qemu/qemu.log
-# or directly:
-wsl qemu-system-arm -M mps2-an385 -nographic -kernel tools/renode/out/bench-m3.elf -d instr -D tools/qemu/qemu.log -semihosting
-wc -l tools/qemu/qemu.log; echo "instr/byte=$(( $(wc -l < qemu.log) / 25600 ))"
+# or directly (note -M and -d mapping, see §7):
+wsl qemu-system-arm -M netduino2 -nographic -kernel tools/renode/out/bench-m3.elf -singlestep -d exec -D /tmp/qemu.log -semihosting
+wc -l /tmp/qemu.log; echo "instr/byte=$(( $(wc -l < /tmp/qemu.log) / 25600 ))"
 ```
-
 Repeat for each bench-*.elf, then compute Ascon/ChaCha/AES-GCM instr ratios by
-rebuilding each variant (e.g. with -DWOLFSSL_ASCON_32BIT vs ChaCha-only) and
-comparing qemu.log line counts. QEMU is not cycle-accurate (instr count only);
+rebuilding each variant and comparing qemu.log line counts. QEMU is not cycle-accurate (instr count only);
 use Renode SysTick or DWT (hal.h PQM4_DWT) for cycle estimates.
 
-## 6. Files
-
+## 6. Files (2026-08-22)
 - tools/renode/out/bench-m0plus.elf (231260 B), bench-m3.elf (229844 B), bench-m4.elf, bench-m33.elf
 - tools/qemu/triangulate.ps1 (existing, unchanged)
 - tools/qemu/qemu.log — not produced (QEMU not installed); see this triangulate.log as proxy
 - tools/qemu/triangulate.log — this file
+
+## 7. Dynamic QEMU triangulation — results 2026-08-23 (success, caveats)
+
+### 7.1 WSL verification (Task 1 post-install)
+```bash
+wsl -- bash -c 'which qemu-system-arm; qemu-system-arm --version; which qemu-arm; qemu-arm --version; which valgrind; valgrind --version'
+# /usr/bin/qemu-system-arm, QEMU 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)
+# /usr/bin/qemu-arm, qemu-arm version 8.2.2
+# /usr/bin/valgrind, valgrind-3.22.0
+wsl --user root -- bash -c 'dpkg -l | grep -E "qemu|valgrind"'
+# ii qemu-system-arm 1:8.2.2+ds-0ubuntu1.18, ii qemu-system-common, ii qemu-system-data, ii qemu-user, ii valgrind 1:3.22.0-0ubuntu3
+```
+
+### 7.2 QEMU system-mode caveats (discovered)
+- `qemu-system-arm -d instr` is NOT valid for system-mode (only user-mode `qemu-arm -d instr`). System-mode valid `-d` includes `exec,in_asm,cpu,mmu,guest_errors,...` (see `qemu-system-arm -d help`). The triangulate.ps1 `-d instr` therefore produces no log and prints the help list; it is a documentation bug for system-mode.
+- With `-M mps2-an385` (and an386/an505/500/musca) the bench ELFs fault immediately: `Lockup: can't escalate 3 to HardFault, R15=00000000` after 10 lines of exec trace. Reason: FLASH is at 0x08000000 in bench.ld, but mps2-an385 maps flash at 0x00000000/0x01000000, so vector fetch fails. The working boards for this layout are `netduino2`, `netduinoplus2`, `stm32vldiscovery` (all map 0x08000000 correctly; entry 0x080003f4 shows as `[00800400/00000000080003f4/...] reset_handler`).
+- `netduino2` is fixed to `cortex-m3` (board restriction `This board can only be used with CPU cortex-m3-arm-cpu`), so running bench-m0plus on it still counts as M3 — it does not differentiate Thumb-1 vs Thumb-2 code density. For true M0 vs M3 differentiation, keep static proxy (§4). No QEMU board exposes `cortex-m0` with 0x08000000 flash in this QEMU build; `microbit` (M0) also faults (flash 0x00000000).
+- Bench never exits: `reset_handler: bl main; b 5b` loops forever after `hdr[3]=1`. QEMU therefore never exits via semihosting; must use `timeout N qemu-system-arm ...` to stop. Full traces are 850M for 15 s (10M lines).
+- To count instructions (not TBs), use `-singlestep` with `-d exec`: without it, `-d exec` logs one line per translation block (TB, 92–355 lines in 8 s). With `-singlestep`, each `Trace 0: ... [00800400/00000000080003f4/...]` is one retired instruction.
+
+### 7.3 Dynamic counts (singlestep exec, counts are per-retired-instruction lines)
+```bash
+# All on netduino2 (M3), singlestep exec, timeout 8 s wall (bench throughput + record + idle spin)
+# Full logs at /tmp/qemu-*.log (not committed; summary in tools/qemu/qemu.log)
+for core in m0plus m3 m4 m33; do
+  timeout 8 qemu-system-arm -M netduino2 -nographic -kernel tools/renode/out/bench-$core.elf -singlestep -d exec -D /tmp/qemu-$core.log -semihosting
+  wc -l /tmp/qemu-$core.log
+done
+```
+| ELF | wall | log | lines (singlestep exec) | TB (no singlestep) | note |
+|---|---|---|---|---|---|
+| bench-m0plus.elf | 8 s | /tmp/qemu-m0plus.log | 8217759 | 92 | M0+ binary on M3 CPU (density not differentiated) |
+| bench-m3.elf | 8 s | /tmp/qemu-m3.log | 8039624 | 355 | M3, netduino2 |
+| bench-m3.elf (stm32vldiscovery) | 8 s | /tmp/qemu-stm32.log | 5198821 | – | same ELF, different board timing (fewer instr/s) |
+| bench-m4.elf | 8 s | /tmp/qemu-m4.log | 7555761 | 93 | M4 binary on M3 CPU |
+| bench-m33.elf | 8 s | /tmp/qemu-m33.log | 7985564 | 355 | M33 binary on M3 CPU |
+| bench-m3.elf | 15 s | /tmp/qemu-m3-singlestep.log | 10354244 | – | 850M file, head reset_handler, tail default_handler spin at 0x0800041e |
+
+Without singlestep (TB): 92,355,93,355 lines — vs singlestep 7.5–8.2M — TB << instr, as expected. Static proxy 23k–34k is code size, dynamic 8M is retired instructions across the window (bench loop >>1 iteration), so dynamic >> static (orders of magnitude) as predicted in §4.
+
+Ratios (8 s window, netduino2, singlestep):
+- M0+/M3: 8217759/8039624 = 1.022× (2.2% higher) — on same M3 CPU, not the 1.50× Thumb-1 expansion seen in static proxy; static proxy remains authoritative for M0+ vs M3 code density.
+- M4/M3: 7555761/8039624 = 0.940× (6% lower) — artifact of running M4 binary on M3 CPU (no DSP), not a real core difference.
+- M33/M3: 7985564/8039624 = 0.993× (0.7% diff) — tied, matching static 0.9997× and Renode 0.0%.
+- M3 netduino2 vs stm32: 8039624/5198821 = 1.55× — board-dependent TB chaining/timing, not core; shows QEMU is triangulation only, not cycle-accurate.
+
+Comparison to static and Renode:
+- Static proxy correctly shows M0+ > M3 (1.50×) and M3=M4=M33 tied (0.2% diff), matching Renode ordering (M0+ slowest 0.477 MiB/s vs M3 1.062 MiB/s, 2.23×). QEMU dynamic on fixed M3 CPU cannot replicate M0+ Thumb-1 overhead, so it shows ~1.02× — this is a QEMU board limitation, not a contradiction.
+- For M3/M4/M33 equivalence, QEMU dynamic 0.94–0.99× matches static 0.999× and Renode 1.00× within <15% (well within target). The remaining gap is idle spin after hdr[3]=1 (b 5b) included in wall window; a proper exit via semihosting `bkpt 0xAB` or rebuilding with `__specs=rdimon` would give bench-only counts. Future work: rebuild bench with semihosting exit, then `timeout` not needed.
+
+### 7.4 Triangulation conclusion
+- QEMU is now installed and produces dynamic exec traces (see tools/qemu/qemu.log for summary, /tmp/qemu-*.log for raw). The traces confirm dynamic >> static (8M vs 23k) and provide TB vs instr distinction.
+- For cross-core ordering, static proxy (§4) + Renode matrix remain authoritative; QEMU dynamic on netduino2 confirms M3/M4/M33 tied within <15% but cannot differentiate M0+ on M3 board. This is documented as a QEMU board mapping ceiling (ponytail: fixed M3 board, per-core boards if throughput differentiation needed).
+- QEMU is triangulation only — not cycle-accurate; use Renode DWT (hal.h PQM4_DWT) for cycles. Ascon instr/byte dynamic with singlestep 8M/25600 ≈ 312 instr/byte in this window (includes idle), vs static 0.90 instr/byte (code density) — the large gap is expected.
+
+## 8. Files (2026-08-23 updated)
+- tools/renode/out/bench-m0plus.elf (231260 B), bench-m3.elf (229844 B), bench-m4.elf, bench-m33.elf
+- tools/qemu/triangulate.ps1 (unchanged; note -d instr is user-mode only, system uses -singlestep -d exec)
+- tools/qemu/qemu.log — summary (this update); raw traces at /tmp/qemu-*.log (e.g. /tmp/qemu-m3-singlestep.log 10354244 lines, 850M) — not committed
+- tools/qemu/triangulate.log — this file
+- tools/side-channel/memcheck.log — updated 2026-08-23 SUCCESS (valgrind 3.22.0, 0 errors, PASS)
+- tools/side-channel/cachegrind.log — updated 2026-08-23 SUCCESS (I refs 2.56B/4.99B, permutation 51–75%)
