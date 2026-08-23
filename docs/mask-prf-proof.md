@@ -268,6 +268,14 @@ fresh `domsep` constant and purpose-specific key to instantiate §1.1.
 
 ## 7. Mechanization status & plan (honest)
 
+> **Canonical MaskAdv (F4):** `formal/coq/mask_adv.v` exports the single
+> `Definition MaskAdv q c k := q*q/2^c + q/2^k` and one closed
+> `Theorem mask_prf_bound` (reuses `count_coll_ub` + FCF `averaging/dupProb`,
+> imports `mask_prf_domsep` table). `formal/easycrypt/mask_prf.ec` imports
+> `mask_prf_domsep.ec` and exposes the same `op MaskAdv(x:real)=x^2/r192+x/r128`.
+> Hand (Thm 1/1′), Coq (`mask_prf.v`+`mask_prf_fcf.v`), and EasyCrypt now
+> reference one `MaskAdv`. Debt `Hreducible`/`delta_P` honest and open (see §7.2).
+
 The proof above is a **hand proof**. This section records what is machine-checked and what is
 not, and how to re-run the check.
 
@@ -300,11 +308,16 @@ The **integer combinatorial core** of the bound is now machine-verified in
   assumptions as `mask_prf_bound` plus `Hks` (`q ≤ 2^k`) and `Hperm` (permutation
   advantage non-negative). No `Admitted`.
 
-Re-run:
+Re-run (single canonical `MaskAdv`):
 
 ```
-wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/formal/coq && coqc mask_prf.v'
+wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/formal/coq && coqc mask_prf_domsep.v && coqc mask_prf.v && coqc mask_adv.v && coqc -R /root/fcf-master/src "" mask_prf_fcf.v'
+wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/formal/easycrypt && easycrypt compile mask_prf.ec'
 ```
+
+`formal/coq/mask_adv.v` is the canonical `MaskAdv` (hand ↔ Coq ↔ FCF ↔ EC); `mask_prf.v`/
+`mask_prf_fcf.v`/`mask_prf.ec` headers reference it. No proof duplicated — `mask_adv.v`
+reuses `mask_prf_bound_tight` and FCF `averaging/dupProb`.
 
 The Coq install (`opam install coq`, Rocq 9.1.1, OCaml 5.1.0) is reachable in WSL even though
 the EasyCrypt/CryptoVerif fetches are not (see §7.2). The model is the **ideal permutation**:
@@ -423,12 +436,14 @@ now carries `easycrypt ~dev` pinned at `git+file:///root/easycrypt#main` (commit
 
 What is machine-checked in EasyCrypt:
 
-- `arith_core` (`x^2/r192 + x/r128 < x^2/r128` for `x ≥ 2`) — the pure-real arithmetic
-  core of Theorem 3 (RFC 9147 §4.2.3 dominance) — is now **proven with `qed`** (no
-  `admitted`), via the `StdOrder` `ler_pmul2r`/`ltr_pmul2l` chain plus `field`/`ring`
-  and `smt`. `mask_dominates_rfc` follows by `smt`.
+- `MaskAdv(x:real)=x^2/r192+x/r128` — single canonical `MaskAdv` imported from
+  `mask_prf_domsep.ec` (same `MaskAdv q c k` as `formal/coq/mask_adv.v`); `arith_core`
+  (`MaskAdv x < x^2/r128` for `x ≥ 2`) — the pure-real arithmetic core of Theorem 3
+  — is now **proven with `qed`** (no `admitted`), via the `StdOrder`
+  `ler_pmul2r`/`ltr_pmul2l` chain plus `field`/`ring` and `smt`. `mask_dominates_rfc`
+  (`MaskAdv x+delta_P < x^2/r128+delta_AES`) follows by `smt`.
 - `mask_prf_real_ideal` / `mask_prf_real_ideal_q` (the honest form `|Pr[GReal]−Pr[GIdeal]| ≤
-  δ_P / δ_P_q`) and `hand_bound_instantiation` / `_q` (conditional `δ_P ≤ q^2/r192+q/r128 ⇒
+  δ_P / δ_P_q`) and `hand_bound_instantiation` / `_q` (conditional `δ_P ≤ MaskAdv q ⇒
   bound) are proven by `smt` from the axioms — the chaining is machine-checked.
 
 What remains an axiom in EasyCrypt (honest):

@@ -1,4 +1,5 @@
 (* canonical domsep: wolfssl/wolfcrypt/mask_prf.h — single source; generated via tools/gen_domsep.py -> formal/coq/mask_prf_domsep.v / formal/easycrypt/mask_prf_domsep.ec; ASCON_MASK_DOMSEP is alias to table[0] *)
+(* canonical MaskAdv: formal/coq/mask_adv.v — single Definition MaskAdv q c k, Thm mask_prf_bound; EC op MaskAdv below *)
 (* mask_prf.ec — EasyCrypt mechanization of the keyed-sponge record-number mask PRF.
  *
  * STATUS (honest, 2026-08-22 — easycrypt compile exits 0):
@@ -58,6 +59,9 @@ require import FMap.
 require import Real.
 require import StdOrder.
 import RealOrder.
+
+(* domsep table — single source *)
+require import Mask_prf_domsep.
 
 (* ------------------------------------------------------------------ *)
 (* Abstract types (320-bit Ascon-P state, 128-bit key/block).          *)
@@ -175,12 +179,15 @@ axiom r128_def : r128 = r64 * r64.
 axiom r192_def : r192 = r128 * r64.
 axiom r96_def : r96 = r64 * r64 * r64.
 
+(* canonical MaskAdv — single definition hand ↔ Coq ↔ EC (MaskAdv(q)=q^2/2^192+q/2^128) *)
+op MaskAdv (x:real) = x^2 / r192 + x / r128.
+
 (* ------------------------------------------------------------------ *)
 (* PROVEN — pure arithmetic core of Theorem 3.                         *)
-(*   For x >= 2:  x^2/r192 + x/r128 < x^2/r128                         *)
+(*   For x >= 2:  MaskAdv(x) < x^2/r128                                *)
 (* ------------------------------------------------------------------ *)
 lemma arith_core (x : real) : 2%r <= x =>
-  x^2 / r192 + x / r128 < x^2 / r128.
+  MaskAdv x < x^2 / r128.
 proof.
   move => hx.
   have h1 : 0%r < x by smt.
@@ -209,6 +216,7 @@ proof.
   (* final: clear denominators by multiplying with r192*r128 > 0;
      the cleared goal reduces to h8 by field/ring *)
   have hpM : 0%r < r192 * r128 by smt.
+  rewrite /MaskAdv.
   apply/(ltr_pmul2l (r192 * r128) hpM).
   have eL : (r192 * r128) * (x^2 / r192 + x / r128)
           = x^2 * r128 + x * r192.
@@ -226,7 +234,7 @@ qed.
 lemma mask_dominates_rfc :
   delta_P <= delta_AES =>
   forall (x : real), 2%r <= x =>
-    x^2 / r192 + x / r128 + delta_P
+    MaskAdv x + delta_P
     < x^2 / r128 + delta_AES.
 proof.
   move => hdp x hx.
@@ -376,10 +384,10 @@ qed.
 (* assumption.                                                         *)
 (* ------------------------------------------------------------------ *)
 lemma hand_bound_instantiation &m (P <: PERM) (A <: ADV{-RealO, -IdealO, -KeyedIdeal}) :
-  delta_P <= (q^2)%r / r192 + q%r / r128 =>
+  delta_P <= MaskAdv q%r =>
   `| Pr[GReal(P, A).main() @ &m : res]
    - Pr[GIdeal(A).main() @ &m : res] |
-  <= (q^2)%r / r192 + q%r / r128.
+  <= MaskAdv q%r.
 proof.
   move => hd.
   have ha := mask_prf_real_ideal &m P A.

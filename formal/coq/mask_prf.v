@@ -1,4 +1,5 @@
 (* canonical domsep: wolfssl/wolfcrypt/mask_prf.h — single source; generated via tools/gen_domsep.py -> formal/coq/mask_prf_domsep.v / formal/easycrypt/mask_prf_domsep.ec; ASCON_MASK_DOMSEP is alias to table[0] *)
+(* canonical MaskAdv: formal/coq/mask_adv.v — single Definition MaskAdv q c k, Thm mask_prf_bound *)
 (* mask_prf.v - Rocq/Coq mechanization of the dominant birthday term of the
    Ascon record-number mask PRF bound (see mask-prf-proof.md, Theorem 1).
 
