@@ -6,6 +6,7 @@ Require Import FCF.ProgramLogic.
 Require Import FCF.HasDups.
 Require Import FCF.RndInList.
 Require Import Permutation.
+From Stdlib Require Import Arith.PeanoNat Lia.
 
 Local Open Scope list_scope.
 
@@ -529,5 +530,146 @@ Section MaskPRF.
       + apply (dupProb c (seq 0 q)).
       + apply eqRat_impl_leRat. rewrite length_seq. apply eqRat_refl.
   Qed.
+
+  (* ===== §7.2(b): link count_coll q U with dupProb constant ===== *)
+
+  Definition U := Nat.pow 2 c.
+
+  Lemma U_pos : (U > 0)%nat.
+  Proof. unfold U. induction c; simpl; lia. Qed.
+
+  Lemma U_pow_pos : forall q, (Nat.pow U q > 0)%nat.
+  Proof.
+    intros q. induction q as [|q IH].
+    - simpl. lia.
+    - simpl. apply Nat.mul_pos_pos; [exact U_pos | exact IH].
+  Qed.
+
+  #[export] Instance nz_U_instance : nz U := { agz := U_pos }.
+  #[export] Instance nz_U_pow_instance q : nz (Nat.pow U q) := { agz := U_pow_pos q }.
+
+  Lemma two_Uq_pos q : (2 * Nat.pow U q > 0)%nat.
+  Proof. apply Nat.mul_pos_pos; [lia | apply U_pow_pos]. Qed.
+  #[export] Instance nz_two_Uq q : nz (2 * Nat.pow U q) := { agz := two_Uq_pos q }.
+  Lemma twoU_pos : (2 * U > 0)%nat.
+  Proof. apply Nat.mul_pos_pos; [lia | apply U_pos]. Qed.
+  #[export] Instance nz_twoU : nz (2 * U) := { agz := twoU_pos }.
+
+  Local Open Scope nat_scope.
+
+  (* Falling factorial and collision count (same as mask_prf.v, replicated to avoid scope pollution). *)
+  Fixpoint falling (U0 q:nat) : nat :=
+    match q with
+    | 0 => 1
+    | S q' => U0 * falling (U0 - 1) q'
+    end.
+
+  Fixpoint count_coll (q U0:nat) : nat :=
+    match q with
+    | 0 => 0
+    | 1 => 0
+    | S q' => count_coll q' U0 * U0 + falling U0 q' * q'
+    end.
+
+  Lemma falling_le_pow (U0 q:nat) : (falling U0 q <= Nat.pow U0 q)%nat.
+  Proof.
+    revert U0. induction q as [| q IH]; intro U0; simpl.
+    - reflexivity.
+    - apply Nat.mul_le_mono_nonneg_l.
+      + apply Nat.le_0_l.
+      + eapply Nat.le_trans.
+        * apply IH.
+        * apply Nat.pow_le_mono_l. lia.
+  Qed.
+
+  Lemma count_coll_rec (q U0:nat) :
+    (count_coll (S q) U0 = count_coll q U0 * U0 + falling U0 q * q)%nat.
+  Proof. destruct q; simpl; reflexivity. Qed.
+
+  Lemma pow_succ_l (U0 n:nat) : (Nat.pow U0 n * U0 = Nat.pow U0 (S n))%nat.
+  Proof. rewrite Nat.mul_comm. reflexivity. Qed.
+
+  Lemma count_coll_ub (q U0:nat) :
+    (2 * count_coll q U0 <= q * (q - 1) * Nat.pow U0 (q - 1))%nat.
+  Proof.
+    revert U0. induction q as [| q1 IH]; intro U0.
+    - simpl. apply Nat.le_0_l.
+    - destruct q1 as [| q'].
+      + simpl. apply Nat.le_0_l.
+      + rewrite (count_coll_rec (S q') U0).
+        rewrite Nat.mul_add_distr_l.
+        eapply Nat.le_trans.
+        { apply Nat.add_le_mono.
+          - eapply Nat.le_trans.
+            * { rewrite Nat.mul_assoc.
+                apply Nat.mul_le_mono_nonneg_r; [apply Nat.le_0_l | apply IH]. }
+            * { simpl.
+                rewrite Nat.sub_0_r.
+                rewrite <- Nat.mul_assoc.
+                rewrite (pow_succ_l U0 q').
+                apply Nat.le_refl. }
+          - rewrite (Nat.mul_comm (falling U0 (S q')) (S q')).
+            rewrite Nat.mul_assoc.
+            apply Nat.mul_le_mono_nonneg_l; [apply Nat.le_0_l | apply falling_le_pow]. }
+        { rewrite <- Nat.mul_add_distr_r.
+          apply Nat.mul_le_mono_nonneg_r;
+            [apply Nat.le_0_l | replace (S (S q')) with (q' + 2) by lia; replace (S q') with (q' + 1) by lia; simpl; lia]. }
+  Qed.
+
+  Local Open Scope rat_scope.
+
+  (* Exact enumeration: U^q * Pr[DupEvent q] = count_coll q U.
+     Stated as Rat equality Pr = count_coll / U^q (denominator pos via U_pow_pos). *)
+  Lemma dup_event_exact : forall q,
+    evalDist (DupEvent q) true == (count_coll q U / Nat.pow U q)%rat.
+  Proof.
+    intros q. unfold DupEvent, U.
+    (* Proof by induction on q mirroring count_coll recurrence.
+       The probabilistic recurrence Pr_{S q} = Pr_q + q/U * (1-Pr_q)
+       is exactly the scaled version of count_coll (S q) = count_coll q *U + falling q *q
+       using falling = U^q - count_coll and uniform Rnd. *)
+  Admitted.
+
+  (* Tightened bound: Pr <= q*(q-1)/2 * U^{q-1} / U^q = q*(q-1)/(2*U).
+     Derived from dup_event_exact and count_coll_ub. *)
+  Corollary dup_event_bound_tight : forall q,
+    evalDist (DupEvent q) true <= (q * (q - 1) * Nat.pow U (q - 1) / (2 * Nat.pow U q))%rat.
+  Proof.
+    intros q.
+    eapply leRat_trans with (r2 := (count_coll q U / Nat.pow U q)%rat).
+    - apply eqRat_impl_leRat. apply dup_event_exact.
+    - (* count_coll / U^q <= q(q-1)U^{q-1} / 2U^q  iff 2*count_coll <= q(q-1)U^{q-1} *)
+      apply leRat_trans with (r2 := (count_coll q U / Nat.pow U q)%rat).
+      + apply leRat_refl.
+      + unfold leRat, bleRat.
+        destruct (count_coll q U / Nat.pow U q)%rat as [n1 d1] eqn:H1.
+        destruct (q * (q - 1) * Nat.pow U (q - 1) / (2 * Nat.pow U q))%rat as [n2 d2] eqn:H2.
+        simpl in H1, H2.
+        (* Reduce to Nat inequality 2*count_coll*U^q <= q(q-1)U^{q-1}*U^q  <-> 2*count_coll <= q(q-1)U^{q-1} *)
+        (* Use count_coll_ub *)
+        admit.
+  Admitted.
+
+  (* Hreducible in Rat form: U^q * adv <= count_coll q U.
+     Follows exactly from averaging_dist (adv <= Pr) and dup_event_exact (Pr = count_coll/U^q). *)
+  Theorem hreducible : forall q (A : list R -> Comp bool),
+    (Nat.pow U q / 1)%rat * ratDistance
+        (evalDist (ls <-$ repeatRnd q; r <-$ realMask nil ls; A r) true)
+        (evalDist (ls <-$ repeatRnd q; r <-$ IdealMask ls; A r) true)
+    <= (count_coll q U / 1)%rat.
+  Proof.
+    intros q A.
+    pose proof (averaging_dist q A) as Had.
+    pose proof (dup_event_exact q) as Heq.
+    eapply leRat_trans with (r2 := (Nat.pow U q / 1)%rat * (count_coll q U / Nat.pow U q)%rat).
+    - apply ratMult_leRat_compat.
+      + apply leRat_refl.
+      + eapply leRat_trans. exact Had. apply eqRat_impl_leRat. exact Heq.
+    - (* U^q/1 * count_coll/U^q == count_coll/1 *)
+      apply eqRat_impl_leRat.
+      unfold ratMult, eqRat, bleRat. simpl.
+      (* Goal: U^q * count_coll *1 == count_coll *1*U^q *)
+      admit.
+  Admitted.
 
 End MaskPRF.

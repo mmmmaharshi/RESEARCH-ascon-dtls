@@ -45,7 +45,7 @@ Theorem 1 bounds PRF advantage by q^2/2^192 + q/2^128 for q queries [MRV15][Men1
 
 ### 3.2 Post-Quantum Lifting (Theorem 2)
 
-Theorem 2 lifts the bound to quantum adversaries with quantum access to P. Under Grover-style halving the bound becomes O(q^2/2^96 + q/2^64) in quantum queries [Hos25]. Nonce-misuse resistance remains classical. No quantum distinguisher exceeds the bound at the stress position — the capacity still dominates at the end.
+Theorem 2 lifts the bound to quantum adversaries with quantum access to P. Under Grover-style halving the bound becomes O(q^2/2^96 + q/2^64) in quantum queries [Hos25]. At q=2^48 the halved-capacity term q^2/2^96 saturates (advantage ≈1) if the online oracle is quantum-accessible — see `docs/mask-prf-proof.md` §5 for the honest vacuous-at-cap reading and the offline-quantum/online-classical model where the q/2^64 term (≈2^-16 at q=2^48) is the practical figure. Nonce-misuse resistance remains classical.
 
 ### 3.3 Theorem 3 and 3'': Dominance That Disappears
 

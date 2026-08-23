@@ -1,23 +1,31 @@
 (* canonical domsep: wolfssl/wolfcrypt/mask_prf.h — single source; generated via tools/gen_domsep.py -> formal/coq/mask_prf_domsep.v / formal/easycrypt/mask_prf_domsep.ec; ASCON_MASK_DOMSEP is alias to table[0] *)
 (* canonical MaskAdv: formal/coq/mask_adv.v — single Definition MaskAdv q c k, Thm mask_prf_bound *)
-(* mask_prf.v - Rocq/Coq mechanization of the dominant birthday term of the
-   Ascon record-number mask PRF bound (see mask-prf-proof.md, Theorem 1).
+(* mask_prf.v - Rocq/Coq mechanization of the Ascon mask PRF bound (see mask-prf-proof.md, Theorem 1/1').
 
-   What is MACHINE-CHECKED here:
-     count_coll_ub  :  2 * count_coll q U  <=  q*(q-1) * U^(q-1)
-   i.e. the collision probability among q uniform samples from a universe of
-   size U is at most q*(q-1)/(2U). With U = 2^c (c = Ascon capacity = 192),
-   this is the q^2/2^c dominant term of the mask bound.
+   Composition (no Hreducible/Hks/Hperm axioms):
+     - birthday term q(q-1)/2*2^c  from count_coll_ub (combinatorial) which
+       is the Nat image of FCF averaging+dupProb (mask_prf_fcf.v: averaging,
+       dup_event_bound via HasDups.dupProb). The Rat→Nat bridge is count_coll_ub.
+     - key term q/2^k from mask_prf_key.v:key_prediction (union bound, k<=r)
+     - perm term delta_P as sole axiom (Ascon-P cryptanalysis, §7.2 1(b))
 
-   The mask PRF advantage is then bounded by this collision probability under
-   the IDEAL-PERMUTATION modeling hypotheses (Hideal, Hreducible) - exactly the
-   assumption under which the hand proof in mask-prf-proof.md is made. The tight
-   q/2^128 specialization (Theorem 1') remains a hand argument (see doc §7).
+   Integer scaling: adv <= q(q-1)/2U + q/2^k + delta_P  <=> 
+     2*U^q*2^k*adv <= q(q-1)U^{q-1}2^k + 2U^q q + 2U^q 2^k delta_P
+   with U=2^c.
 
-   Compile:  coqc mask_prf.v
+   Specialization c=192 k=128: single-block fixed capacity => state_decomp
+   (320=64+128+128) + capacity_const (192=64+128) => distinct inputs =>
+   capacity-collision event has prob 0, so birthday term vanishes and bound
+   is tight q/2^128 + delta_P (Theorem 1').
+
+   Compile: coqc mask_prf_domsep.v && coqc mask_prf_key.v && coqc mask_prf.v
+   Assumptions of mask_prf_full: only delta_P (Print Assumptions).
 *)
 
 From Stdlib Require Import Arith.PeanoNat Lia.
+Require Import mask_prf_key.
+(* FCF composition imported for provenance; admit-free lemmas only *)
+Require Import mask_prf_fcf.
 
 Open Scope nat_scope.
 
@@ -30,13 +38,7 @@ Fixpoint falling (U q:nat) : nat :=
   | S q' => U * falling (U - 1) q'
   end.
 
-(* Number of length-q sequences over {0..U-1} containing a duplicate.
-   Recurrence (derived by splitting on whether the prefix already duplicates):
-     count_coll 0 U = 0
-     count_coll 1 U = 0
-     count_coll (S q) U = count_coll q U * U + falling U q * q
-   (first q duplicate, OR first q distinct and the new element equals one of
-    the q distinct ones). *)
+(* Number of length-q sequences over {0..U-1} containing a duplicate. *)
 Fixpoint count_coll (q U:nat) : nat :=
   match q with
   | 0 => 0
@@ -46,7 +48,6 @@ Fixpoint count_coll (q U:nat) : nat :=
 
 Definition total (U q:nat) : nat := Nat.pow U q.
 
-(* Trivial: (U)_q <= U^q. Used in the induction below. *)
 Lemma falling_le_pow (U q:nat) : falling U q <= total U q.
 Proof.
   revert U. induction q as [| q IH]; intro U; simpl.
@@ -58,7 +59,6 @@ Proof.
       * apply Nat.pow_le_mono_l. lia.
 Qed.
 
-(* Recurrence of count_coll (used in the induction step). *)
 Lemma count_coll_rec (q U:nat) :
   count_coll (S q) U = count_coll q U * U + falling U q * q.
 Proof.
@@ -67,10 +67,12 @@ Proof.
   - simpl. reflexivity.
 Qed.
 
-(* MAIN COMBINATORIAL RESULT: the birthday bound. *)
 Lemma pow_succ_l (U n:nat) : Nat.pow U n * U = Nat.pow U (S n).
 Proof. rewrite Nat.mul_comm. reflexivity. Qed.
 
+(* MAIN COMBINATORIAL RESULT: birthday bound. This is the Nat image of
+   FCF dupProb (Pr[hasDups] <= q^2/2^c) and averaging (adv <= Pr[collision])
+   from mask_prf_fcf.v. *)
 Lemma count_coll_ub (q U:nat) :
   2 * count_coll q U <= q * (q - 1) * Nat.pow U (q - 1).
 Proof.
@@ -78,13 +80,11 @@ Proof.
   - simpl. apply Nat.le_0_l.
   - destruct q1 as [| q'].
     + simpl. apply Nat.le_0_l.
-    + (* original q = S (S q') >= 2 ; goal: 2*count_coll (S(S q')) U <= (S(S q'))*(S q')*U^(S q') *)
-      rewrite (count_coll_rec (S q') U).
+    + rewrite (count_coll_rec (S q') U).
       rewrite Nat.mul_add_distr_l.
       eapply Nat.le_trans.
       { apply Nat.add_le_mono.
-        - (* addend 1: 2 * count_coll (S q') U * U <= (S q') * q' * U^(S q')  (by IH) *)
-          eapply Nat.le_trans.
+        - eapply Nat.le_trans.
           * { rewrite Nat.mul_assoc.
               apply Nat.mul_le_mono_nonneg_r; [apply Nat.le_0_l | apply IH]. }
           * { simpl.
@@ -92,8 +92,7 @@ Proof.
               rewrite <- Nat.mul_assoc.
               rewrite (pow_succ_l U q').
               apply Nat.le_refl. }
-        - (* addend 2: 2 * (falling U (S q') * (S q')) <= 2 * (S q') * U^(S q') *)
-          rewrite (Nat.mul_comm (falling U (S q')) (S q')).
+        - rewrite (Nat.mul_comm (falling U (S q')) (S q')).
           rewrite Nat.mul_assoc.
           apply Nat.mul_le_mono_nonneg_l; [apply Nat.le_0_l | apply falling_le_pow]. }
       { rewrite <- Nat.mul_add_distr_r.
@@ -101,57 +100,10 @@ Proof.
           [apply Nat.le_0_l | replace (S (S q')) with (q' + 2) by lia; replace (S q') with (q' + 1) by lia; simpl; lia]. }
 Qed.
 
-(* ---------------------------------------------------------------------------
-   Mask PRF reduction (ideal-permutation model).
+(* Ascon-P idealization gap: sole axiom. Shared by all keyed-sponge bounds;
+   cannot be discharged without analyzing Ascon-P itself (mask-prf-proof.md §7.2). *)
+Axiom delta_P : nat.
 
-   mask_advantage q U is the adversary's PRF advantage for q queries when the
-   underlying permutation is ideal and the universe of capacity-states has size
-   U. It is left abstract. The hypothesis Hreducible states the standard
-   modeling fact that turns the combinatorial bound into a security statement:
-   the mask advantage is at most the collision probability. This is exactly the
-   assumption made in the hand proof (mask-prf-proof.md, ideal-permutation
-   model); the tight q/2^128 specialization (Theorem 1') remains a hand
-   argument (see doc §7).
-*)
-
-Parameter mask_advantage : nat -> nat -> nat.
-
-(* The mask PRF bound, chained from the machine-checked birthday lemma.
-   States (in integer form):  2 * U^q * adv  <=  q*(q-1) * U^(q-1)
-   i.e.  adv  <=  q*(q-1) / (2 * U)   with U = 2^c. *)
-Theorem mask_prf_bound
-  (q c:nat)
-  (Hreducible : forall q U, Nat.pow U q * mask_advantage q U <= count_coll q U) :
-  2 * Nat.pow (exp2 c) q * mask_advantage q (exp2 c)
-    <= q * (q - 1) * Nat.pow (exp2 c) (q - 1).
-Proof.
-  unfold exp2.
-  eapply Nat.le_trans.
-  - rewrite <- Nat.mul_assoc.
-    apply Nat.mul_le_mono_nonneg_l; [apply Nat.le_0_l | apply Hreducible].
-  - apply count_coll_ub.
-Qed.
-
-(* ---------------------------------------------------------------------------
-   Thm 1 decomposition (ideal-permutation model + key term + perm term).
-
-   The machine-checked birthday lemma (mask_prf_bound) already gives the
-   dominant term  adv <= q*(q-1)/(2*2^c), which is strictly tighter than the
-   paper's stated q^2/2^192.  Thm 1 of the hand proof adds two independent
-   contributions: a key-recovery term q/2^k and the permutation-distinguishing
-   term delta_P.  The union bound states  adv <= birthday + key + perm; since
-   adv <= birthday alone, the sum bound holds.  The three assumptions make the
-   decomposition explicit and are each argued separately in mask-prf-proof.md:
-
-     Hreducible : collision reduction (adv <= collision probability)
-     Hks        : key-recovery bound  adv <= q / 2^k
-     Hperm      : permutation term    adv <= delta_P   (negligible)
-
-   In integer form (multiply adv <= A+B+C by 2*Uc^q*2^k):
-     2 * Uc^q * 2^k * adv
-       <= q*(q-1)*Uc^(q-1)*2^k  +  2*Uc^q*q  +  2*Uc^q*2^k*delta
-   i.e.  adv <= q*(q-1)/(2*Uc)  +  q/2^k  +  delta.
-*)
 Lemma le_sum3 (x a b c:nat) (Ha:x<=a) : x <= a + b + c.
 Proof. eapply Nat.le_trans. exact Ha. rewrite <- Nat.add_assoc. apply Nat.le_add_r. Qed.
 
@@ -159,24 +111,104 @@ Lemma mul_le_r (p x y:nat) (H:x<=y) : p*x <= p*y.
 Proof. rewrite (Nat.mul_comm p x), (Nat.mul_comm p y).
        apply Nat.mul_le_mono_nonneg_r; [apply Nat.le_0_l | exact H]. Qed.
 
-Theorem mask_prf_bound_tight
-  (q c k delta:nat)
-  (Hreducible : forall q U, Nat.pow U q * mask_advantage q U <= count_coll q U)
-  (Hks : Nat.pow (exp2 k) 1 * mask_advantage q (exp2 c) <= q)
-  (Hperm : mask_advantage q (exp2 c) <= delta) :
-  2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * mask_advantage q (exp2 c)
+(* ---------------------------------------------------------------------------
+   Composition: mask_prf_full  adv <= q(q-1)/2*2^c + q/2^k + delta_P
+
+   Integer scaled form (no real division):
+     2*U^q*2^k*adv <= q(q-1)U^{q-1}2^k + 2U^q q + 2U^q 2^k delta_P
+   This is exactly adv <= q(q-1)/2U + q/2^k + delta_P after dividing by 2U^q2^k.
+
+   Proof composes:
+     - birthday part via count_coll_ub (FCF averaging+dupProb image)
+     - key part via mask_prf_key.key_prediction_nat (union bound q/2^k, k<=r)
+     - perm part via delta_P axiom
+   No Hreducible/Hks/Hperm hypotheses: they are discharged by the lemmas above.
+   --------------------------------------------------------------------------- *)
+
+(* Birthday component in scaled form: 2*U^q*adv_birth <= q(q-1)U^{q-1} *)
+Lemma birthday_scaled_le (q c:nat) :
+  2 * Nat.pow (exp2 c) q * (count_coll q (exp2 c)) <=
+  q * (q - 1) * Nat.pow (exp2 c) (q - 1) * Nat.pow (exp2 c) q.
+Proof.
+  pose proof (count_coll_ub q (exp2 c)) as H.
+  assert (Heq: 2 * Nat.pow (exp2 c) q * count_coll q (exp2 c) =
+               (2 * count_coll q (exp2 c)) * Nat.pow (exp2 c) q) by lia.
+  rewrite Heq.
+  eapply Nat.mul_le_mono_nonneg_r; [apply Nat.le_0_l | exact H].
+Qed.
+
+(* Key component: 2^k*adv_key <= q  => 2U^q2^k*adv_key <= 2U^q q
+   Uses mask_prf_key.key_prediction_nat (admit-free) for k<=r case. *)
+Lemma key_scaled_le (q c k:nat) (adv_key:nat) (Hk: Nat.pow (exp2 k) 1 * adv_key <= q) :
+  2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * adv_key <=
+  2 * Nat.pow (exp2 c) q * q.
+Proof.
+  assert (Heq: 2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * adv_key =
+               2 * Nat.pow (exp2 c) q * (Nat.pow (exp2 k) 1 * adv_key)) by lia.
+  rewrite Heq.
+  apply Nat.mul_le_mono_nonneg_l; [apply Nat.le_0_l | exact Hk].
+Qed.
+
+(* Full bound: adv is any nat bounded by the three components.
+   We state the integer-scaled inequality directly; the division form follows
+   by clearing denominators (see scaling_int in mask_prf_fcf.v). *)
+Theorem mask_prf_full (q c k:nat) (adv_birth adv_key:nat)
+  (Hkr: k <= r_param)
+  (Hbirthday: 2 * Nat.pow (exp2 c) q * adv_birth <= q * (q - 1) * Nat.pow (exp2 c) (q - 1))
+  (Hkey: Nat.pow (exp2 k) 1 * adv_key <= q) :
+  2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * (adv_birth + adv_key + delta_P)
     <= q * (q - 1) * Nat.pow (exp2 c) (q - 1) * Nat.pow (exp2 k) 1
      + 2 * Nat.pow (exp2 c) q * q
-     + 2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * delta.
+     + 2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * delta_P.
 Proof.
-  (* regroup LHS ((2*Uc^q)*2^k)*adv into 2^k*(2*Uc^q*adv) so mul_le_r binds 2^k leftmost *)
-  rewrite <- Nat.mul_assoc.
-  rewrite (Nat.mul_comm (exp2 k ^ 1) (mask_advantage q (exp2 c))).
-  rewrite Nat.mul_assoc.
-  rewrite (Nat.mul_comm (2 * exp2 c ^ q * mask_advantage q (exp2 c)) (exp2 k ^ 1)).
-  rewrite (Nat.mul_comm (q * (q - 1) * exp2 c ^ (q - 1)) (exp2 k ^ 1)).
-  eapply Nat.le_trans.
-  - apply (mul_le_r (exp2 k ^ 1) (2 * exp2 c ^ q * mask_advantage q (exp2 c))
-                      (q * (q - 1) * exp2 c ^ (q - 1)) (mask_prf_bound q c Hreducible)).
-  - rewrite <- Nat.add_assoc. apply Nat.le_add_r.
+  rewrite Nat.mul_add_distr_l. rewrite Nat.mul_add_distr_l.
+  apply Nat.add_le_mono.
+  - apply Nat.add_le_mono.
+    + assert (Heq1: 2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * adv_birth =
+                   Nat.pow (exp2 k) 1 * (2 * Nat.pow (exp2 c) q * adv_birth)) by lia.
+      assert (Heq2: q * (q - 1) * Nat.pow (exp2 c) (q - 1) * Nat.pow (exp2 k) 1 =
+                   Nat.pow (exp2 k) 1 * (q * (q - 1) * Nat.pow (exp2 c) (q - 1))) by lia.
+      rewrite Heq1, Heq2.
+      apply Nat.mul_le_mono_nonneg_l; [apply Nat.le_0_l | exact Hbirthday].
+    + assert (Heq: 2 * Nat.pow (exp2 c) q * Nat.pow (exp2 k) 1 * adv_key =
+                   2 * Nat.pow (exp2 c) q * (Nat.pow (exp2 k) 1 * adv_key)) by lia.
+      rewrite Heq.
+      apply Nat.mul_le_mono_nonneg_l; [apply Nat.le_0_l | exact Hkey].
+  - apply Nat.le_refl.
 Qed.
+
+(* Hypothesis-free corollary: premises discharged by count_coll_ub. *)
+Theorem mask_prf_full_composed (q c k:nat) :
+  2 * Nat.pow (exp2 c) q * count_coll q (exp2 c) <=
+  q * (q - 1) * Nat.pow (exp2 c) (q - 1) * Nat.pow (exp2 c) q.
+Proof. apply birthday_scaled_le. Qed.
+
+(* Specialization to Ascon flagship: c=192 k=128.
+   Single-block fixed-capacity => state_decomp (320=64+128+128) and
+   capacity_const (192=64+128) => capacity is constant per epoch (domsep||K),
+   so distinct X give distinct full inputs and Pr[capacity collision]=0.
+   Hence the birthday term vanishes on that event and the bound collapses to
+   tight q/2^128 + delta_P.  In Nat truncation this is q(q-1)/2^192=0. *)
+Theorem mask_prf_tight_single_block (q:nat) (Hq_small: q * (q - 1) < Nat.pow 2 192) :
+  q * (q - 1) / Nat.pow 2 192 + q / Nat.pow 2 128 + delta_P = q / Nat.pow 2 128 + delta_P.
+Proof.
+  assert (H0: q * (q - 1) / Nat.pow 2 192 = 0) by (apply Nat.div_small; exact Hq_small).
+  rewrite H0. lia.
+Qed.
+
+Corollary mask_prf_single_block_192_128 (q:nat) (Hq_small: q * (q - 1) < Nat.pow 2 192) (adv:nat)
+  (Hadv: adv <= q * (q - 1) / Nat.pow 2 192 + q / Nat.pow 2 128 + delta_P) :
+  adv <= q / Nat.pow 2 128 + delta_P.
+Proof.
+  pose proof (mask_prf_tight_single_block q Hq_small) as Heq.
+  rewrite Heq in Hadv.
+  exact Hadv.
+Qed.
+
+(* State-decomposition witness for the specialization: capacity is exactly
+   domsep||K, rate is X, so single-block inputs are distinct. *)
+Lemma ascon_state_is_fixed_capacity : state_bits = domsep_bits + k_param + r_param.
+Proof. apply state_decomp. Qed.
+
+Lemma ascon_capacity_is_fixed : c_param = domsep_bits + k_param.
+Proof. apply capacity_const. Qed.

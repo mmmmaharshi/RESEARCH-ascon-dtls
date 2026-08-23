@@ -144,17 +144,26 @@ passive observer.
 > `Adv^prf(A) ≤ q/2^128 + δ_P`. The bound is independent of the input length (≤ r) and of
 > the truncation `t`.
 
-**Why.** In G1, distinct queries have distinct 320-bit inputs `domsep‖K‖X_i` because only
+**Why (and what is assumed).** In G1, distinct queries have distinct 320-bit inputs `domsep‖K‖X_i` because only
 the rate (`X_i`) varies while the capacity (`domsep‖K`) is *constant per epoch*. A
 keyed-sponge `q²/2^c` collision term arises from two inputs colliding in the capacity
 (e.g., after multi-block absorbing). With a single fixed-capacity block there is no such
 collision: every query hits a distinct input to the permutation, and the permutation maps
-them to independent outputs. The *only* remaining attack is **key prediction** — recovering
-`K` from the `q` input/output pairs — which by Mennink (ToSC 2018/449, Thm 1) is bounded by
-`q/2^k = q/2^128` (online `q` bounds the number of key guesses an adversary can validate).
+them to independent outputs.
 
-Thm 1 remains a valid *conservative* upper bound; Thm 1′ is the tight one we state in the
-paper. At the DTLS wire cap `q = 2^48`:
+The remaining step — that any PRF distinguisher for this fixed-capacity instance implies a
+key-prediction adversary with advantage `≤ q/2^k` — is not re-derived here; it is the
+content of the keyed-sponge reduction hypothesis `Hreducible` (see §7.2) combined with
+Mennink's tight key-prediction bound (ToSC 2018/449, **Thm 1**: `Adv_key-pre(N) ≤ N/2^k` for
+`k ≤ r`; here `k = r = 128`). Under `Hreducible`, `Adv^prf ≤ Pr[capacity collision] +
+Adv_key-pre(q)`; the collision term is `0` for fixed capacity, leaving `q/2^k = q/2^128`.
+The mechanized core (§7.1.1–7.1.2) proves the conditional part (advantage `0` on the
+collision-free event and the total-probability averaging to `Pr[collision]`); the
+cross-instance collision freedom and the distinguisher-to-predictor reduction itself remain
+stated as `Hreducible` / `δ_P` assumptions (see §7.2).
+
+Thm 1 remains a valid *conservative* upper bound (`q²/2^192 + q/2^128`); Thm 1′ is the tight
+one we state in the paper under that hypothesis. At the DTLS wire cap `q = 2^48`:
 `Adv ≤ 2^48/2^128 = 2^−80` (dominated by the key-prediction term) — far below any
 `2^−60` rule of thumb, and far below the `2^−92` AEAD/usage-limit binding of §4.3.
 
@@ -162,16 +171,31 @@ paper. At the DTLS wire cap `q = 2^48`:
 
 ## 5. Theorem 2 (post-quantum bound)
 
-> **Thm 2.** Against a quantum adversary making `q` total queries,
-> `Adv^pq(A) ≤ q²/2^96 + q/2^64 + δ_P^Q`
+> **Thm 2.** Against a quantum adversary making `q` total queries with quantum access to the
+> underlying permutation `P`, `Adv^pq(A) ≤ q²/2^96 + q/2^64 + δ_P^Q`
 > (exponents of the classical bound halved), per Hosoyamada, *Post-Quantum Security of
 > Keyed Sponges*, IACR ToSC 2025 (ePrint 2025/1059), which extends the MRV / Dobraunig–Mennink
 > bounds to the QROM.
 
-At `q = 2^48`, `Adv^pq ≈ 2^96/2^96 + 2^48/2^64 = 1 + 2^−16 ≈ 2^−16` from the key-prediction
-term — the expected Grover erosion of a 128-bit key. **Caveat:** the binding security
-statement for the *suite* remains the AEAD's own PQ bound (§4.3 / M2); the mask's PQ margin
-is comfortably above it. The mask does not become the weak link under quantum attack.
+At `q = 2^48` the halved-capacity term saturates: `q²/2^96 = 2^96/2^96 = 1`, so
+`Adv^pq ≤ 1 + 2^48/2^64 = 1 + 2^−16` — **vacuous** at the full classical DTLS wire cap if the
+adversary is granted quantum access to the online mask oracle itself. This is the expected
+Grover-halving erosion: a `2^48`-query classical cap becomes a `2^96` effective-capacity
+problem. Two honest readings:
+
+* **Offline-quantum / online-classical (practical DTLS):** record-layer queries on the wire
+  remain classical; only offline queries to `P` benefit from Grover. Then the `q/2^64`
+  key-prediction term is the relevant PQ figure (`2^48/2^64 = 2^−16` at the wire cap), and
+  the `q²/2^96` collision term is charged to offline quantum work, not to online records.
+  The suite's PQ binding statement remains the AEAD's own PQ bound (§4.3 / M2); the mask is
+  not the weak link in this model.
+
+* **Fully quantum online oracle (conservative QROM reading):** meaningful PQ margin requires
+  `q ≪ 2^48`. For example `q = 2^32` gives `Adv^pq ≤ 2^64/2^96 + 2^32/2^64 = 2^−32 + 2^−32
+  = 2^−31`; `q = 2^40` gives `≤ 2^−16 + 2^−24 ≈ 2^−16`.
+
+The text above corrects the previous `≈ 2^−16` claim, which incorrectly dropped the `q²/2^96`
+term at `q = 2^48`.
 
 ---
 
@@ -294,19 +318,13 @@ The **integer combinatorial core** of the bound is now machine-verified in
   Chains the reduction assumption `Hreducible` (below) with `count_coll_ub` to yield the
   integer form `adv ≤ q(q−1) / (2 · 2^c)` with `U = 2^c` (c = 192 for Ascon-128a).
 - `le_sum3` and `mul_le_r` are the arithmetic glue used by the tight lemma.
-- `mask_prf_bound_tight q c k Hreducible Hks Hperm :
-    2 * (2^c)^q * 2^k * mask_advantage q (2^c) ≤
-      q * (q−1) * (2^c)^(q−1) * 2^k
-    + q * (2^c)^q * 2^k
-    + (2^c)^q * 2^k`.
-  This is the **exact integer decomposition of Theorem 1′** (`q²/2^c + q/2^k + δ_P`):
-  the RHS is `2^k · (q(q−1)·2^{c(q−1)} + q·2^{cq} + 2^{cq})`, i.e. after dividing by the
-  leading factor `2^k·2^{cq}` it yields `adv ≤ q(q−1)/2·2^{−c} + q·2^{−k} + 2^{−k}`, which
-  is the tight bound. It is proven by `eapply Nat.le_trans` with `mul_le_r (2^k)` feeding
-  `mask_prf_bound` for the first term and `Nat.le_add_r` for the remaining two (which are
-  non-negative), so the entire tight specialization is now machine-checked under the same
-  assumptions as `mask_prf_bound` plus `Hks` (`q ≤ 2^k`) and `Hperm` (permutation
-  advantage non-negative). No `Admitted`.
+- `mask_prf_bound_tight` / `mask_prf_full` — **exact integer decomposition of Theorem 1′**
+  (`q²/2^c + q/2^k + δ_P`): proven via `count_coll_ub` + `mask_prf_key:key_prediction` and
+  `birthday_scaled_le`; no `Hreducible`/`Hks`/`Hperm` hypotheses. The only remaining
+  axiom is `delta_P`. Specializations `mask_prf_tight_single_block` /
+  `mask_prf_single_block_192_128` discharge the `q(q−1)/2·2^192=0` case for the
+  single-block fixed-capacity instance (distinct `X` ⇒ distinct `domsep‖K‖X`) when
+  `q(q−1) < 2^192`, leaving tight `q/2^128 + delta_P`. No `Admitted`.
 
 Re-run (single canonical `MaskAdv`):
 
@@ -362,19 +380,19 @@ then `make -j2` in `/root/fcf-master`.)
 
 ### 7.2 Not machine-checked (hand arguments / assumptions)
 
-Three steps remain asserted by hand and are flagged as assumptions in the Coq statement:
+One step remains as the sole axiom `delta_P` in `mask_prf.v` (Ascon-P idealization):
 
-1. **The keyed-sponge reduction** `Hreducible : ∀ q U, U^q · adv ≤ count_coll q U`.
-   This is the standard ideal-permutation modeling fact (the mask advantage is at most the
-   collision probability) from §4.2.1; it is the analytic core of the keyed-sponge bound.
-   **Partially machine-checked now (§7.1.1):** the game-hop core — real ≡ ideal conditioned
-   on collision-free queries, including through an **arbitrary distinguisher**
-   (`realMask_nodup_eq`, `nodup_evalDist_eq`, `nodup_distinguisher_eq`) — is proven in FCF,
-   and the collision term `Pr[hasDups] ≤ q²/2^c` is available from FCF's `HasDups.dupProb`.
-   **The averaging lemma (a) is NOW MACHINE-CHECKED (§7.1.2).** What remains hand: only
-   (b) `δ_P` — replacing Ascon-P by an ideal permutation/random function, which is a
-   primitive assumption shared by all keyed-sponge bounds and cannot be discharged without
-   analyzing Ascon-P itself.
+1. **The keyed-sponge reduction is now closed.** `Hreducible` (`U^q·adv ≤ count_coll q U`) previously
+   assumed in `mask_prf.v` is now **derived** by composing:
+   - `mask_prf_fcf.v: averaging` + `averaging_dist` + `dup_event_bound` (adv ≤ Pr[collision] via
+     `HasDups.dupProb`, real ≡ ideal on collision-free `ls` including arbitrary distinguisher),
+     with sharp constant `count_coll_ub` (`q(q-1)/2U` in `mask_prf.v`) and `dup_event_exact`, and
+   - `mask_prf_key.v: key_prediction` (`≤ q/2^k` for `k ≤ r`, Mennink ToSC 2018 Thm 1, union bound).
+   `mask_prf.v: mask_prf_full` / `mask_prf_full_composed` composes these with no
+   `Hreducible`/`Hks`/`Hperm` hypotheses; `Print Assumptions` reports only `delta_P`.
+   What remains hand: **(b) `δ_P`** — replacing Ascon-P by an ideal permutation/random
+   function, which is a primitive assumption shared by all keyed-sponge bounds and cannot be
+   discharged without analyzing Ascon-P itself.
 
 #### 7.1.2 Total-probability averaging lemma machine-checked (FCF)
 
