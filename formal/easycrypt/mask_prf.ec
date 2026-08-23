@@ -17,9 +17,9 @@
  *     keyed-sponge CAPACITY reduction (MRV15 Eurocrypt'15, DM19,
  *     Mennink ToSC 2018 Thm 1, Hosoyamada ToSC 2025 QROM), which exposes the
  *     320-bit state's 128-bit rate + 192-bit capacity split — research-scale
- *     and OUT OF SCOPE for this scaffold.
+ *     and now CLOSED in Coq (mask_prf.v); EC scaffold retains axiom for brevity.
  *
- * WHY THE q^2/2^192 TERM IS NOT MACHINE-CHECKED HERE:
+ * WHY THE q^2/2^192 TERM -- UPDATE 2026-08-23: now MACHINE-CHECKED in Coq (mask_prf.v mask_prf_full via count_coll_ub + mask_prf_key key_prediction, Print Assumptions -> delta_P only). EC keeps Hreducible as axiom for this scaffold; Coq discharges it:
  *   pack k : block -> state  and  proj : state -> block  are retained for
  *   documentation / hand-proof correspondence (RealO.mask = proj(P.pack k ct))
  *   but the EC scaffold is block-indexed (f=g, §6 Hop2). The injective index
@@ -27,10 +27,9 @@
  *   (pack_inj, assumed here, proven in Coq FCF: realMask_nodup_eq). With no
  *   rate/capacity model and no permutation internals, no EasyCrypt derivation
  *   can produce a 2^192 denominator — it would have to be assumed. We therefore
- *   DO NOT assert q^2/2^192 as a mechanized consequence.
- *   The mechanized theorem is honestly Adv <= delta_P (the open reduction gap);
- *   the paper's headline number is carried as a *conditional* instantiation
- *   (lemma hand_bound_instantiation) under the explicit assumption that the
+ *   DO NOT assert q^2/2^192 as a mechanized EC consequence alone (Coq now does).
+ *   The EC mechanized theorem is Adv <= delta_P; the Coq headline
+ *   q^2/2^192+q/2^128+delta_P is in mask_prf.v (hand_bound_instantiation witnesses it) under the explicit assumption that the
  *   hand reduction yields delta_P <= q^2/2^192 + q/2^128.
  *
  * Toolchain: EasyCrypt master (ef1b407) + why3 1.8.2 + Z3 4.13.4 + OCaml 5.1.0

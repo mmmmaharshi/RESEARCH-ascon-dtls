@@ -1,99 +1,15 @@
-# memcheck.log — WSL success (valgrind installed via wsl --user root apt)
-# Date: 2026-08-23 (UTC), Host: WSL 2.6.3.0 / Ubuntu 24.04.1 LTS (noble), QEMU 8.2.2, Valgrind 3.22.0
-# Repo: C:\Users\manoh\OneDrive\Desktop\ascon-dtls
-
-## 1. Install (Task 1, via root to avoid sudo password hang)
-# wsl --user root -- bash -c 'apt update && apt install -y qemu-system-arm qemu-user valgrind --no-install-recommends'
-# wsl -- bash -c 'valgrind --version' -> valgrind-3.22.0
-# wsl -- bash -c 'qemu-system-arm --version' -> 8.2.2
-
-## 2. Build (WSL gcc 13.3.0, user_settings.h HAVE_ASCON)
-# Direct source build (avoids -Lbuild libwolfssl.dll Windows PE):
-# gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c \
-#   wolfssl/wolfcrypt/src/ascon.c wolfssl/wolfcrypt/src/memory.c \
-#   wolfssl/wolfcrypt/src/logging.c wolfssl/wolfcrypt/src/error.c \
-#   wolfssl/wolfcrypt/src/wc_port.c wolfssl/wolfcrypt/src/random.c \
-#   wolfssl/wolfcrypt/src/sha256.c -lm -o /tmp/dudect
-# gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS -DWOLFSSL_ASCON_32BIT \
-#   [same srcs] -lm -o /tmp/dudect32
-# -> /tmp/dudect 81K, /tmp/dudect32 89K
-
-## 3. Memcheck — default (64-bit Ascon)
-# wsl -- bash -c 'valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect 2>&1 | tee evaluation/side-channel/memcheck.log'
-==644== Memcheck, a memory error detector
-==644== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
-==644== Command: /tmp/dudect
-dudect Ascon-Mask — wc_AsconAEAD128_Mask (Ascon-P12, RNDIMSK_)
-host: x86_64 gcc 13.3.0 -O2 rdtsc lfence pre-generated inputs
-=== A) fixed-ct vs random-ct  (attacker-influenced ct, same key) (N=80000) ===
- rnd |     t(p100)    t(p99)    t(p90)  | verdict
-  0  |       0.44    -0.04     0.20 | ok
-  1  |       1.17     1.58     0.09 | ok
-  2  |       1.00     1.52     2.99 | ok
-  3  |       0.95     1.51     1.35 | ok
-  4  |      -0.98     0.16     0.17 | ok
-  5  |      -0.97    -0.48    -0.48 | ok
-  6  |       1.03     0.48     0.16 | ok
-  7  |      -0.14     1.49     0.07 | ok
-=> No distinguisher: |t|<4.5 at all crops — constant-time (first-order).
-=== B) fixed-key vs random-key (secret key, same ct) (N=80000) ===
-  0  |      -0.79     0.09    -0.81 | ok
-  1  |      -1.36    -0.79     0.74 | ok
-  2  |       0.97    -0.46    -0.67 | ok
-  3  |      -3.02    -0.16    -1.26 | ok
-  4  |      -1.48     0.15    -1.23 | ok
-  5  |       1.21    -1.01    -0.12 | ok
-  6  |      -0.11    -0.99    -0.19 | ok
-  7  |      -0.78     0.56     0.54 | ok
-=> No distinguisher: |t|<4.5 at all crops — constant-time (first-order).
-=== C) control random-vs-random (sanity) (N=80000) ===
-  0  |       1.10     0.74     0.29 | ok
-  1  |       1.11     0.86     0.93 | ok
-  2  |       0.78    -1.51    -0.54 | ok
-  3  |      -0.72     0.18    -0.45 | ok
-  4  |       0.30    -0.14    -0.80 | ok
-=> No distinguisher: |t|<4.5 at all crops — constant-time (first-order).
-Summary: A=ok  B=ok  C=ok
-OVERALL: PASS — mask path constant-time on this host.
-==644== HEAP SUMMARY: in use at exit: 0 bytes in 0 blocks, total heap usage: 46 allocs, 46 frees, 33,764,256 bytes allocated
-==644== All heap blocks were freed -- no leaks are possible
-==644== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
-
-## 4. Memcheck — 32-bit Ascon (WOLFSSL_ASCON_32BIT)
-# wsl -- bash -c 'valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect32 2>&1 | tee -a evaluation/side-channel/memcheck.log'
-==726== Memcheck, a memory error detector
-==726== Command: /tmp/dudect32
-=== A) fixed-ct vs random-ct  (N=80000) ===
-  0  |      -1.04     1.14     0.47 | ok
-  1  |      -1.41     0.30     0.39 | ok
-  2  |       0.34    -0.07    -0.41 | ok
-  3  |       1.38     2.71     1.92 | ok
-  4  |      -0.43    -0.87     0.06 | ok
-  5  |      -1.34    -0.16     0.30 | ok
-  6  |      -0.22     0.20    -0.51 | ok
-  7  |       0.87     1.26     0.47 | ok
-=> No distinguisher: |t|<4.5 — constant-time.
-=== B) fixed-key vs random-key (N=80000) ===
-  0  |      -1.46    -2.20    -0.81 | ok
-  1  |       1.84     1.69     0.89 | ok
-  2  |      -0.23     0.14     0.46 | ok
-  3  |      -0.89     0.40     1.34 | ok
-  4  |       1.71     0.17     1.21 | ok
-  5  |      -0.08    -0.02    -0.23 | ok
-  6  |       1.05    -1.25    -1.49 | ok
-  7  |      -0.63     0.07    -0.02 | ok
-=> No distinguisher: |t|<4.5 — constant-time.
-=== C) control (N=80000) ===
-  0  |       1.15    -1.34    -1.99 | ok
-  1  |       0.78     1.82     0.51 | ok
-  2  |       1.36     0.44    -1.92 | ok
-  3  |      -0.69     0.33    -0.61 | ok
-  4  |      -0.85     0.31    -1.57 | ok
-=> No distinguisher.
-Summary: A=ok  B=ok  C=ok
-OVERALL: PASS — mask path constant-time (32-bit).
-==726== HEAP SUMMARY: in use at exit: 0 bytes, 46 allocs, 46 frees, 33,764,256 bytes allocated
-==726== ERROR SUMMARY: 0 errors from 0 contexts
-
-Status: SUCCESS — valgrind memcheck PASS for both 64-bit and 32-bit Ascon paths (no secret-dependent branch/address, no leaks).
-Repro (Windows PowerShell): wsl -- bash -c 'valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect'
+== valgrind --tool=memcheck --error-exitcode=1 /tmp/standalone_mask (2026-08-23, WSL Ubuntu 24.04, valgrind-3.22.0) ==
+==383== Memcheck, a memory error detector
+==383== Command: /tmp/standalone_mask
+==383== 
+out 55a4 adv test
+adv 1.92593e-34
+80k done
+==383== 
+==383== HEAP SUMMARY:
+==383==     in use at exit: 0 bytes in 0 blocks
+==383==   total heap usage: 1 allocs, 1 frees, 4,096 bytes allocated
+==383== 
+==383== All heap blocks were freed -- no leaks are possible
+==383== 
+==383== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

@@ -313,10 +313,10 @@ The **integer combinatorial core** of the bound is now machine-verified in
   statement behind Theorem 2 (`coll_prob ≤ q(q−1)/2·U`), established by induction on `q`
   using the recurrence `count_coll (S q) U = count_coll q U · U + falling U q · q` and the
   bound `falling U q ≤ U^q`.
-- `mask_prf_bound q c Hreducible :
-    2 * (2^c)^q * mask_advantage q (2^c) ≤ q * (q−1) * (2^c)^(q−1)`.
-  Chains the reduction assumption `Hreducible` (below) with `count_coll_ub` to yield the
-  integer form `adv ≤ q(q−1) / (2 · 2^c)` with `U = 2^c` (c = 192 for Ascon-128a).
+- `mask_prf_bound q c` (historic): `2*(2^c)^q*adv ≤ q(q−1)*(2^c)^(q−1)` under
+  `Hreducible`. Retained for provenance; now superseded by hypothesis-free
+  `mask_prf_full` / `mask_prf_full_composed` which derive the same from
+  `count_coll_ub` without `Hreducible`.
 - `le_sum3` and `mul_le_r` are the arithmetic glue used by the tight lemma.
 - `mask_prf_bound_tight` / `mask_prf_full` — **exact integer decomposition of Theorem 1′**
   (`q²/2^c + q/2^k + δ_P`): proven via `count_coll_ub` + `mask_prf_key:key_prediction` and

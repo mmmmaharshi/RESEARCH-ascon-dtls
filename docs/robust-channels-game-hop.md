@@ -42,10 +42,10 @@ IND$-CPA challenger for the AEAD, and answers A's decryption queries using the
 AEAD's decryption (reject on tag failure). By Ascon-AEAD128's IND$-CPA
 security (C1, SP 800-232):
 
-    |Pr[G0 ⇒ 1] − Pr[G1 ⇒ 1]| ≤ Adv^{IND-CPA}_AEAD(B_cca).
+    |Pr[G0 ⇒ 1] − Pr[G1 ⇒ 1]| ≤ Adv^{IND\$-CPA}_AEAD(B_cca).
 
 The query count is preserved 1:1, so there is **no multi-query loss** on the
-confidentiality side.
+confidentiality side. (Æ is IND\$-CPA + INT-CTXT; IND\$-CPA ≤ IND-CPA + switching term, so either label yields same numeric bound here.)
 
 ### Hop 2 — integrity / forgery (the non-tight part)
 
@@ -73,8 +73,8 @@ identified; it is exactly why C3 is NOT bounded by C1/C2 alone.
 
 ## Combination (Proposition 5.9, [FGJ20])
 
-    Adv^{ROB-INT-IND-CCA}_A(Ch) ≤ Adv^{ROB-INT}_A(Ch) + Adv^{IND-CPA}_A(Ch)
-                                ≤ Adv^{INT-CTXT}_AEAD(q_R) + Adv^{IND-CPA}_AEAD.
+    Adv^{ROB-INT-IND-CCA}_A(Ch) ≤ Adv^{ROB-INT}_A(Ch) + Adv^{IND\$-CPA}_A(Ch)
+                                 ≤ Adv^{INT-CTXT}_AEAD(q_R) + Adv^{IND\$-CPA}_AEAD.
 
 ## Plug-in: Ascon bounds (C1/C2, SP 800-232)
 
