@@ -3,12 +3,12 @@
 # Repo: C:\Users\manoh\OneDrive\Desktop\ascon-dtls
 
 ## 1. Build (same as memcheck)
-# gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c \
+# gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c \
 #   wolfssl/wolfcrypt/src/ascon.c ... wolfssl/wolfcrypt/src/sha256.c -lm -o /tmp/dudect
 # gcc -DWOLFSSL_ASCON_32BIT ... -o /tmp/dudect32
 
 ## 2. Cachegrind — default (64-bit Ascon)
-# wsl -- bash -c 'valgrind --tool=cachegrind --cachegrind-out-file=/tmp/cachegrind.out /tmp/dudect 2>&1 | tee tools/side-channel/cachegrind.log; cg_annotate /tmp/cachegrind.out | tee -a tools/side-channel/cachegrind.log'
+# wsl -- bash -c 'valgrind --tool=cachegrind --cachegrind-out-file=/tmp/cachegrind.out /tmp/dudect 2>&1 | tee evaluation/side-channel/cachegrind.log; cg_annotate /tmp/cachegrind.out | tee -a evaluation/side-channel/cachegrind.log'
 ==829== I refs:        2,565,041,221
 -- Summary: Ir 2,565,041,221 (100.0%) PROGRAM TOTALS
 -- File:function: permutation 1,320,405,000 (51.5%), msort_with_tmp 426,640,945 (16.6%), cmp_u64 227M (8.9%), welch_t 191M (7.5%), run_test 165M (6.4%), __memcpy_avx 147M (5.8%), wc_AsconAEAD128_Mask 69,495,000 (2.7%)

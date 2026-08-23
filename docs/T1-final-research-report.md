@@ -437,7 +437,7 @@ trusting an end-entity certificate directly.
 
 ## DTLS record-layer benchmark (Cortex-M)
 
-The Renode harness was extended (`tools/renode/bench_record.c`) to measure the
+The Renode harness was extended (`evaluation/renode/bench_record.c`) to measure the
 cost of protecting one DTLS 1.3 record with `TLS13-ASCONAEAD128-ASCONHASH256`
 on the emulated Cortex-M0+/M3, using the same SysTick timing as the primitive
 benchmark. Each line is one full `wc_AsconAEAD128` operation (Init, SetKey,

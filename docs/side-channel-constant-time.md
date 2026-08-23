@@ -66,7 +66,7 @@ rely on harden flags — its resistance comes from the construction itself. Enab
 
 ## 3. Dudect instrumentation (mask path specifically)
 
-A `dudect`-style harness was added at `tools/ascon_mask_dudect.c` (~280 lines, no
+A `dudect`-style harness was added at `evaluation/side-channel/ascon_mask_dudect.c` (~280 lines, no
 external deps). It follows Reparaz et al. (USENIX Security 2017): interleaved
 fixed-vs-random measurements, Welch's `t`-test, outlier cropping, threshold `|t|>4.5`.
 
@@ -90,8 +90,8 @@ Timing: `rdtsc` serialized with `lfence` before/after the call, `N=80,000` sampl
 per round, up to 8 rounds (~640k measurements per test). Three crops: `p100` (all),
 `p99`, `p90` — standard dudect outlier handling. `WARMUP=5000` stabilizes predictors.
 
-Build (64-bit): `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log` (MSYS2 ucrt64, 14.2.0).
-32-bit (split-halves, arithmetic-only): `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log` — 2026-08-23 PASS matches 64-bit (see §4). Full 4-job matrix: §5.
+Build (64-bit): `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log` (MSYS2 ucrt64, 14.2.0).
+32-bit (split-halves, arithmetic-only): `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log` — 2026-08-23 PASS matches 64-bit (see §4). Full 4-job matrix: §5.
 
 ## 4. Result (negative — publishable)
 
@@ -101,12 +101,12 @@ passes here, it passes cleanly on a pinned Cortex-M). 2026-08-23 re-run matrix
 
 | job | command | log | verdict |
 |-----|---------|-----|---------|
-| dudect 64-bit | `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect` | `tools/ascon_mask_dudect.log` | **PASS** |
-| dudect 32-bit | `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32` | `tools/ascon_mask_dudect32.log` | **PASS** |
-| memcheck 64+32 | `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect*` | `tools/side-channel/memcheck.log` | **PENDING** (WSL valgrind not available — repro commands documented) |
-| cachegrind 64+32 | `valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/dudect && cg_annotate cachegrind.out` | `tools/side-channel/cachegrind.log` | **PENDING** (WSL valgrind not available — repro commands documented) |
+| dudect 64-bit | `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect` | `evaluation/side-channel/ascon_mask_dudect.log` | **PASS** |
+| dudect 32-bit | `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32` | `evaluation/side-channel/ascon_mask_dudect32.log` | **PASS** |
+| memcheck 64+32 | `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect*` | `evaluation/side-channel/memcheck.log` | **PENDING** (WSL valgrind not available — repro commands documented) |
+| cachegrind 64+32 | `valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/dudect && cg_annotate cachegrind.out` | `evaluation/side-channel/cachegrind.log` | **PENDING** (WSL valgrind not available — repro commands documented) |
 
-64-bit (`tools/ascon_mask_dudect.log`, 2026-08-23):
+64-bit (`evaluation/side-channel/ascon_mask_dudect.log`, 2026-08-23):
 ```
 dudect Ascon-Mask — wc_AsconAEAD128_Mask (Ascon-P12, RNDIMSK_)
 host: x86_64 MSYS2 ucrt64 gcc 14.2.0 -O2 rdtsc lfence pre-generated inputs
@@ -138,7 +138,7 @@ Summary: A=ok  B=ok  C=ok
 OVERALL: PASS — mask path constant-time on this host.
 ```
 
-32-bit (`tools/ascon_mask_dudect32.log`, 2026-08-23 — same harness with `-DWOLFSSL_ASCON_32BIT`, split-halves arithmetic-only):
+32-bit (`evaluation/side-channel/ascon_mask_dudect32.log`, 2026-08-23 — same harness with `-DWOLFSSL_ASCON_32BIT`, split-halves arithmetic-only):
 ```
 dudect Ascon-Mask — wc_AsconAEAD128_Mask (Ascon-P12, RNDIMSK_)
 host: x86_64 MSYS2 ucrt64 gcc 14.2.0 -O2 rdtsc lfence pre-generated inputs
@@ -170,7 +170,7 @@ OVERALL: PASS — mask path constant-time on this host.
 
 32-bit PASS matches 64-bit PASS — both paths are arithmetic-only (64-bit: `WORD64` XOR/ANDNOT/ROTR fixed; 32-bit: each 64-bit word as two 32-bit halves, same XOR/ANDNOT/ROTR sequence, `round_constants[round]` indexed by round only). No data-dependent branch or table.
 
-Raw logs: `tools/ascon_mask_dudect.log` (64-bit), `tools/ascon_mask_dudect32.log` (32-bit), `tools/side-channel/memcheck.log` + `cachegrind.log` (WSL pending, repro documented).
+Raw logs: `evaluation/side-channel/ascon_mask_dudect.log` (64-bit), `evaluation/side-channel/ascon_mask_dudect32.log` (32-bit), `evaluation/side-channel/memcheck.log` + `cachegrind.log` (WSL pending, repro documented).
 
 Interpretation: **no first-order timing distinguisher** on either the
 attacker-influenced `ct` path or the secret `sn_key` path. The control passing
@@ -195,9 +195,9 @@ complementary static-dynamic checks. Full 4-job matrix (dudect 64+32, memcheck, 
 
 ```sh
 # Job 1 — dudect 64-bit (default, arithmetic-only)
-gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log
+gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log
 # Job 2 — dudect 32-bit (split-halves, arithmetic-only, expected PASS matches 64-bit)
-gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log
+gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log
 
 # Job 3 — memcheck: secret-dependent branches/addresses (ct/sn_key marked undefined)
 valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect 2>&1 | tee memcheck.log
@@ -216,10 +216,10 @@ Execution 2026-08-23 (Windows 11 MSYS2 ucrt64 + WSL2 Ubuntu 24.04.1, kernel 6.6.
 
 | job | result | evidence |
 |-----|--------|----------|
-| dudect 64-bit | **PASS** | `tools/ascon_mask_dudect.log` (§4 above) |
-| dudect 32-bit | **PASS** | `tools/ascon_mask_dudect32.log` (§4 above, matches 64-bit — both arithmetic-only split halves) |
-| memcheck | **PENDING** | `tools/side-channel/memcheck.log` — `wsl bash -c "valgrind --version"` → `command not found`; `sudo apt-get install -y valgrind` hung (WSL image without valgrind). Repro commands above valid for Linux runner. Expected PASS (no undefined-dependent branch/address — binary has no conditional on `s64`/`ct`/`key` in hot path, §2). |
-| cachegrind | **PENDING** | `tools/side-channel/cachegrind.log` — same WSL valgrind not available. Repro commands above valid. Expected no secret-dependent branches/cache misses (straight-line XOR/ANDNOT/ROTR, fixed 12 rounds). |
+| dudect 64-bit | **PASS** | `evaluation/side-channel/ascon_mask_dudect.log` (§4 above) |
+| dudect 32-bit | **PASS** | `evaluation/side-channel/ascon_mask_dudect32.log` (§4 above, matches 64-bit — both arithmetic-only split halves) |
+| memcheck | **PENDING** | `evaluation/side-channel/memcheck.log` — `wsl bash -c "valgrind --version"` → `command not found`; `sudo apt-get install -y valgrind` hung (WSL image without valgrind). Repro commands above valid for Linux runner. Expected PASS (no undefined-dependent branch/address — binary has no conditional on `s64`/`ct`/`key` in hot path, §2). |
+| cachegrind | **PENDING** | `evaluation/side-channel/cachegrind.log` — same WSL valgrind not available. Repro commands above valid. Expected no secret-dependent branches/cache misses (straight-line XOR/ANDNOT/ROTR, fixed 12 rounds). |
 
 The same guarantee is already provided by the code audit above — the binary
 contains no conditional on `s64`/`ct`/`key` in the hot path — so valgrind would
@@ -236,15 +236,15 @@ Leave Jobs 3-4 as CI jobs for the Linux runner (matrix 64-bit + 32-bit, memcheck
   scaling. The constant-time claim is architectural (instruction + address trace)
   and therefore holds on Cortex-M0+/M3 (in-order, no caches) *a fortiori*; a
   Renode cycle-count run would be the direct Cortex-M counterpart. Renode DWT
-  future work: `tools/renode/hal.h` (DEMCR@0xE000EDFC, DWT_CTRL@0xE0001000,
+  future work: `evaluation/renode/hal.h` (DEMCR@0xE000EDFC, DWT_CTRL@0xE0001000,
   DWT_CYCCNT@0xE0001004, `hal_dwt_enable()`/`hal_cc()`) + `build_bench.ps1 -Dwt`
   (`-DPQM4_DWT -O2`, pqm4-style) is wired but not run in this env — leave as
   next-step validation (M3/M4/M33; M0+ falls back to SysTick SYST_CVR@0xE000E018).
 - **32-bit path:** `WOLFSSL_ASCON_32BIT` uses the same arithmetic with split halves
   (each 64-bit word as two 32-bit halves, same XOR/ANDNOT/ROTR sequence) — both
-  paths are arithmetic-only. **Verified 2026-08-23: 32-bit PASS matches 64-bit PASS** (§4, `tools/ascon_mask_dudect32.log` vs `tools/ascon_mask_dudect.log`). Repro:
-  `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log`
-  and `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log`. Keep as CI matrix entry (64-bit + 32-bit).
+  paths are arithmetic-only. **Verified 2026-08-23: 32-bit PASS matches 64-bit PASS** (§4, `evaluation/side-channel/ascon_mask_dudect32.log` vs `evaluation/side-channel/ascon_mask_dudect.log`). Repro:
+  `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log`
+  and `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log`. Keep as CI matrix entry (64-bit + 32-bit).
 - **`ForceZero`:** verified to wipe `AsconState s`; its own timing is not part of
   the mask distinguisher (measured interval excludes it only insofar as it is after
   the `rdtsc` window — the wipe itself is outside the mask PRF).
@@ -256,7 +256,7 @@ Leave Jobs 3-4 as CI jobs for the Linux runner (matrix 64-bit + 32-bit, memcheck
 - Add one paragraph in §5 (Evaluation) or §6 (Security) — "Side-channel analysis
   of the mask": static data-obliviousness + dudect on `wc_AsconAEAD128_Mask`
   (fixed-vs-random `ct`, fixed-vs-random `sn_key`, `N=80k`, `|t|<4.5`, control
-  passes). Reference `side-channel-constant-time.md` + `tools/ascon_mask_dudect.c`
+  passes). Reference `side-channel-constant-time.md` + `evaluation/side-channel/ascon_mask_dudect.c`
   + log. State explicitly that the negative result is expected because Ascon-P
   uses no `ct`-indexed tables (contrast AES `T-table` / `S-box`).
 - This does **not** replace the M2 bounded-security claim — it complements it
@@ -264,9 +264,9 @@ Leave Jobs 3-4 as CI jobs for the Linux runner (matrix 64-bit + 32-bit, memcheck
 
 ---
 *Repro matrix (4 jobs, §5):*
-*  Job 1 dudect 64-bit:* `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log` → PASS (`tools/ascon_mask_dudect.log`)
-*  Job 2 dudect 32-bit:* `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log` → PASS (`tools/ascon_mask_dudect32.log`, matches 64-bit, arithmetic-only split halves)
-*  Job 3 memcheck (WSL/Linux):* `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect 2>&1 | tee memcheck.log` + same for `/tmp/dudect32` (secret-dependent branches/addresses) → PENDING (WSL valgrind not available 2026-08-23, `tools/side-channel/memcheck.log` documents attempt; Linux CI)
-*  Job 4 cachegrind (WSL/Linux):* `valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/dudect && cg_annotate cachegrind.out | tee cachegrind.log` + same for 32-bit (branch + cache triangulation) → PENDING (WSL valgrind not available, `tools/side-channel/cachegrind.log`)
-*Renode DWT future work:* `tools/renode/hal.h` + `tools/renode/build_bench.ps1 -Dwt` (`-DPQM4_DWT -O2`); QEMU triangulation `tools/qemu/triangulate.ps1` (not cycle-accurate, triangulation only).
-Logs: `tools/ascon_mask_dudect.log`, `tools/ascon_mask_dudect32.log`, `tools/side-channel/memcheck.log`, `tools/side-channel/cachegrind.log`. Static audit: `wolfssl/wolfcrypt/src/ascon.c` `permutation()` + `wc_AsconAEAD128_Mask()`.
+*  Job 1 dudect 64-bit:* `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log` → PASS (`evaluation/side-channel/ascon_mask_dudect.log`)
+*  Job 2 dudect 32-bit:* `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log` → PASS (`evaluation/side-channel/ascon_mask_dudect32.log`, matches 64-bit, arithmetic-only split halves)
+*  Job 3 memcheck (WSL/Linux):* `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect 2>&1 | tee memcheck.log` + same for `/tmp/dudect32` (secret-dependent branches/addresses) → PENDING (WSL valgrind not available 2026-08-23, `evaluation/side-channel/memcheck.log` documents attempt; Linux CI)
+*  Job 4 cachegrind (WSL/Linux):* `valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/dudect && cg_annotate cachegrind.out | tee cachegrind.log` + same for 32-bit (branch + cache triangulation) → PENDING (WSL valgrind not available, `evaluation/side-channel/cachegrind.log`)
+*Renode DWT future work:* `evaluation/renode/hal.h` + `evaluation/renode/build_bench.ps1 -Dwt` (`-DPQM4_DWT -O2`); QEMU triangulation `evaluation/qemu/triangulate.ps1` (not cycle-accurate, triangulation only).
+Logs: `evaluation/side-channel/ascon_mask_dudect.log`, `evaluation/side-channel/ascon_mask_dudect32.log`, `evaluation/side-channel/memcheck.log`, `evaluation/side-channel/cachegrind.log`. Static audit: `wolfssl/wolfcrypt/src/ascon.c` `permutation()` + `wc_AsconAEAD128_Mask()`.

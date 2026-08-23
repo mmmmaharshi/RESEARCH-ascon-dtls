@@ -81,7 +81,7 @@ with HMAC-Ascon-Hash256 — subject to the bounds and non-claims below.
     hybrid sum composing with Prop. 5.9, the concrete enforced (`q_R=2^16` →
     ≤ 2^-92 + 2^-112) and protocol-max (`q_R=2^48` → ≤ 2^-92 + 2^-80)
     scenarios, the KeyUpdate-is-load-bearing inequality, and the mask's absence
-    from the bound — is machine-checked in `tools/coq/robust_channels.v`
+    from the bound — is machine-checked in `formal/coq/robust_channels.v`
     (Rocq/Coq, no `Admitted`). The game-hop reductions themselves (IND-CPA,
     single-query INT-CTXT, Prop. 5.9) are stated as hypotheses, exactly as
     `mask_prf.v` assumes `Hreducible`; see `robust-channels-game-hop.md`

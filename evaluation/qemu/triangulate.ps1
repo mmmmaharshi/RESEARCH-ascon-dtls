@@ -29,7 +29,7 @@ if(!(Test-Path $Elf)){
     # expand wildcard bench-m*.elf
     $hits = Get-ChildItem -Path (Split-Path $Elf -Parent) -Filter "bench-m*.elf" -ErrorAction SilentlyContinue
     if($hits){ $Elf = $hits[0].FullName; Write-Output "Using $Elf" }
-    else { Write-Error "ELF not found: $Elf (build with tools/renode/build_bench.ps1 first)"; exit 1 }
+    else { Write-Error "ELF not found: $Elf (build with evaluation/renode/build_bench.ps1 first)"; exit 1 }
 }
 
 if($Mode -eq "system"){

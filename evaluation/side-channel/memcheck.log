@@ -9,7 +9,7 @@
 
 ## 2. Build (WSL gcc 13.3.0, user_settings.h HAVE_ASCON)
 # Direct source build (avoids -Lbuild libwolfssl.dll Windows PE):
-# gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS tools/ascon_mask_dudect.c \
+# gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c \
 #   wolfssl/wolfcrypt/src/ascon.c wolfssl/wolfcrypt/src/memory.c \
 #   wolfssl/wolfcrypt/src/logging.c wolfssl/wolfcrypt/src/error.c \
 #   wolfssl/wolfcrypt/src/wc_port.c wolfssl/wolfcrypt/src/random.c \
@@ -19,7 +19,7 @@
 # -> /tmp/dudect 81K, /tmp/dudect32 89K
 
 ## 3. Memcheck — default (64-bit Ascon)
-# wsl -- bash -c 'valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect 2>&1 | tee tools/side-channel/memcheck.log'
+# wsl -- bash -c 'valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect 2>&1 | tee evaluation/side-channel/memcheck.log'
 ==644== Memcheck, a memory error detector
 ==644== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
 ==644== Command: /tmp/dudect
@@ -60,7 +60,7 @@ OVERALL: PASS — mask path constant-time on this host.
 ==644== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 
 ## 4. Memcheck — 32-bit Ascon (WOLFSSL_ASCON_32BIT)
-# wsl -- bash -c 'valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect32 2>&1 | tee -a tools/side-channel/memcheck.log'
+# wsl -- bash -c 'valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/dudect32 2>&1 | tee -a evaluation/side-channel/memcheck.log'
 ==726== Memcheck, a memory error detector
 ==726== Command: /tmp/dudect32
 === A) fixed-ct vs random-ct  (N=80000) ===

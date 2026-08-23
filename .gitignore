@@ -27,16 +27,16 @@ Thumbs.db
 wolfssl/
 
 # Coq build artifacts (mask_prf.v is the source — keep it tracked)
-tools/coq/*.vo
-tools/coq/*.vok
-tools/coq/*.vos
-tools/coq/*.glob
-tools/coq/.lia.cache
-tools/coq/.mask_prf.aux
+formal/coq/*.vo
+formal/coq/*.vok
+formal/coq/*.vos
+formal/coq/*.glob
+formal/coq/.lia.cache
+formal/coq/.mask_prf.aux
 
-tools/coq/.*.aux
-tools/easycrypt/*.eco
+formal/coq/.*.aux
+formal/easycrypt/*.eco
 
 # Evidence logs are intentionally tracked (reproducibility): do NOT ignore
-# tools/easycrypt/mask_prf.compile.log, tools/coq/*.compile.log, tools/ascon_mask_dudect.log
-# Repro: easycrypt compile mask_prf.ec ; coqc mask_prf.v ; ./tools/ascon_mask_dudect.exe
+# formal/easycrypt/mask_prf.compile.log, formal/coq/*.compile.log, evaluation/side-channel/ascon_mask_dudect.log
+# Repro: easycrypt compile mask_prf.ec ; coqc mask_prf.v ; ./evaluation/side-channel/ascon_mask_dudect.exe

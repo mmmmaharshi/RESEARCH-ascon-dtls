@@ -99,7 +99,7 @@ incidental.
 ## Mechanization status (honest)
 
 The **arithmetic core** of this game-hop is now machine-checked in
-`tools/coq/robust_channels.v` (Rocq/Coq; no `Admitted` — all goals closed).
+`formal/coq/robust_channels.v` (Rocq/Coq; no `Admitted` — all goals closed).
 
 ### What is machine-checked
 
@@ -116,7 +116,7 @@ The **arithmetic core** of this game-hop is now machine-checked in
 Re-run (WSL, as for `mask_prf.v`):
 
 ```
-wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/tools/coq && coqc robust_channels.v'
+wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/formal/coq && coqc robust_channels.v'
 ```
 
 ### Scaling convention (identical to `mask_prf.v`)
@@ -162,5 +162,5 @@ the cryptographic-reduction steps.
   Thms 7.1 & 7.2 via Prop. 5.9, §7 DTLS 1.3 analysis.
 - NIST SP 800-232 (Ascon-AEAD128 bounds → C1/C2).
 - design-01-record-layer.md §4.2.1 (mask PRF, disjoint key).
-- `tools/coq/robust_channels.v` (arithmetic-core mechanization).
-- `tools/coq/mask_prf.v` (companion mask-PRF bound mechanization).
+- `formal/coq/robust_channels.v` (arithmetic-core mechanization).
+- `formal/coq/mask_prf.v` (companion mask-PRF bound mechanization).

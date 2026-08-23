@@ -20,8 +20,8 @@ ARM Cortex-M and measured with `arm-none-eabi-size` (`.text` bytes, i.e. code
   -nostartfiles -fno-builtin` plus the research-harness user settings
   (`WOLFSSL_USER_SETTINGS`, `BENCH_EMBEDDED`, `NO_WOLFSSL_DIR`, `WC_NO_RNG`,
   `SINGLE_THREADED`, `NO_*`, `WOLFSSL_BENCHMARK_FIXED_UNITS_MB`) and
-  `-include tools/renode/bench_stub.h`.
-- Harness: `tools/renode/size_primitives.ps1` (builds each object, prints sizes
+  `-include evaluation/renode/bench_stub.h`.
+- Harness: `evaluation/renode/size_primitives.ps1` (builds each object, prints sizes
   for both cores, and emits `out/size-<core>/footprint.tsv`).
 - Common code (`misc.c`, `error.c`, `wc_port.c`, the TLS stack) is excluded —
   it is linked by every suite and is not part of the cipher's footprint. This
@@ -34,7 +34,7 @@ wolfSSL's `ascon.c` has two implementations selected by `WOLFSSL_ASCON_32BIT`:
 
 - **32-bit path (`WOLFSSL_ASCON_32BIT`)** — decomposes the 320-bit state into
   ten `word32` lanes. This is the build used by the **throughput benchmark**
-  (`tools/renode/build_bench.ps1` defines `-DWOLFSSL_ASCON_32BIT`) and is the
+  (`evaluation/renode/build_bench.ps1` defines `-DWOLFSSL_ASCON_32BIT`) and is the
   fast path on 32-bit cores. It is also auto-selected by wolfSSL's settings
   unless explicitly unset, so a plain `-DWOLFSSL_USER_SETTINGS` build lands here.
 - **64-bit-word path (default, `WOLFSSL_ASCON_32BIT` undefined, `WORD64_AVAILABLE`)**
@@ -135,6 +135,6 @@ Ratios (smaller is better for footprint):
 - `aes.o` includes AES-GCM and AES-CCM code paths; a build limited to GCM only
   could be marginally smaller, but it would still dwarf Ascon.
 - **No variance reported for code-size figures:** `arm-none-eabi-size` output is
-  deterministic — the size harness (`tools/renode/size_primitives.ps1`) yields
+  deterministic — the size harness (`evaluation/renode/size_primitives.ps1`) yields
   byte-identical `.text` totals on every run, so there is nothing to average and
   no std is reported (unlike the cycle benchmarks above).

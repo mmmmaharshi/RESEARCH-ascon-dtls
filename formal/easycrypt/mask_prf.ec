@@ -6,7 +6,7 @@
  *   - Hop 2 (GKeyed == GIdeal, gap 0) is an AXIOM in EasyCrypt here
  *     (axiom Pr_eq_GKeyed_GIdeal). The same hop is MACHINE-CHECKED in Coq
  *     FCF: realMask_nodup_eq / nodup_distinguisher_eq / averaging /
- *     dup_event_bound (adv <= q^2/2^c) in tools/coq/mask_prf_fcf.v — see
+ *     dup_event_bound (adv <= q^2/2^c) in formal/coq/mask_prf_fcf.v — see
  *     mask-prf-proof.md §7.1.1-7.1.2. EasyCrypt's block-indexed view (f=g)
  *     captures the perfect part; the capacity-aware derivation of the
  *     2^192 denominator (MRV15/Men18) sits in axiom Hreducible below.
@@ -304,7 +304,7 @@ op invOK (f : (block, block) fmap) (g : (block, block) fmap) : bool =
 (* out of scope for EasyCrypt here; it is carried as axiom            *)
 (* Hreducible below. In Coq FCF the same hop is machine-checked:      *)
 (* realMask_nodup_eq / nodup_distinguisher_eq / averaging /           *)
-(* dup_event_bound (adv <= q^2/2^c) in tools/coq/mask_prf_fcf.v.       *)
+(* dup_event_bound (adv <= q^2/2^c) in formal/coq/mask_prf_fcf.v.       *)
 (* For EasyCrypt we state the perfect part as an axiom here.          *)
 axiom Pr_eq_GKeyed_GIdeal &m (A <: ADV{-KeyedIdeal, -IdealO}) :
   Pr[GKeyed(A).main() @ &m : res] = Pr[GIdeal(A).main() @ &m : res].

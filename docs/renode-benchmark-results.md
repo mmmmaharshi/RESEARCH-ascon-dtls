@@ -8,9 +8,9 @@ inside Renode 1.16.1 (`renode.exe` portable), using the bundled
 
 - CPU clock: **32 MHz** (`systickFrequency: 32000000`).
 - SRAM: 256 KB (`0x20000000`, length `0x40000`), flash 512 KB.
-- Bench harness: `tools/renode/bench_main.c` (custom `main`, SysTick-based
+- Bench harness: `evaluation/renode/bench_main.c` (custom `main`, SysTick-based
   `current_time` remap, SRAM result buffer), built with
-  `tools/renode/build_bench.ps1`, executed by `tools/renode/run_driver.ps1`.
+  `evaluation/renode/build_bench.ps1`, executed by `evaluation/renode/run_driver.ps1`.
 - Bench config: `BENCH_EMBEDDED` → `bench_size = 1024 B`, `NUM_BLOCKS = 25`,
   `BENCH_MIN_RUNTIME_SEC = 1.0 s` (each algorithm runs until ≥1 s elapsed).
 - Units: **MiB/s** = 1024² bytes/sec. Throughput is measured from CPU cycles
@@ -40,7 +40,7 @@ inside Renode 1.16.1 (`renode.exe` portable), using the bundled
 | SHA-256 | 0.504 | 0.996 | 0.996 | 0.996 | 1.98× | 1.98× | 1.98× |
 | HMAC-SHA256 | 0.514 | 0.992 | 0.992 | 0.992 | 1.93× | 1.93× | 1.93× |
 
-> **Cross-ISA ratio & M4/M33 measurement (2026-08-22, Renode 1.16.1, `Repeats=10`, `out/matrix.tsv`):** M4 and M33 were measured with `tools/renode/run_matrix.ps1 -Repeats 10 -Cores @("m0plus","m3","m4","m33")` — per-algorithm MiB/s for M4/M33 are **identical to M3** (ASCON 0.749, AES-GCM 0.166, ChaPoly 2.725, ChaCha 1.903, SHA-256 0.996, HMAC 0.992 MiB/s) and per-record cycles are identical to M3 (enc 1862.4, dec 1925.1, mask 666.9 cyc/rec; matrix overall avg `1.062 MiB/s / 1484.8 cyc/rec` for M3/M4/M33 vs `0.477 MiB/s / 2645.9 cyc/rec` for M0+). This reflects Renode's integer instruction-count model, which does not differentiate M3/M4/M33 for this C-only workload (no DSP/FPU). **R9 emulation caveat still applies:** Renode is an instruction-count emulator, not silicon; numbers are deterministic (std = 0.000) but not physical-hardware measurements.
+> **Cross-ISA ratio & M4/M33 measurement (2026-08-22, Renode 1.16.1, `Repeats=10`, `out/matrix.tsv`):** M4 and M33 were measured with `evaluation/renode/run_matrix.ps1 -Repeats 10 -Cores @("m0plus","m3","m4","m33")` — per-algorithm MiB/s for M4/M33 are **identical to M3** (ASCON 0.749, AES-GCM 0.166, ChaPoly 2.725, ChaCha 1.903, SHA-256 0.996, HMAC 0.992 MiB/s) and per-record cycles are identical to M3 (enc 1862.4, dec 1925.1, mask 666.9 cyc/rec; matrix overall avg `1.062 MiB/s / 1484.8 cyc/rec` for M3/M4/M33 vs `0.477 MiB/s / 2645.9 cyc/rec` for M0+). This reflects Renode's integer instruction-count model, which does not differentiate M3/M4/M33 for this C-only workload (no DSP/FPU). **R9 emulation caveat still applies:** Renode is an instruction-count emulator, not silicon; numbers are deterministic (std = 0.000) but not physical-hardware measurements.
 
 All values are **mean ± std over 10 Renode runs per core**; std = 0.000 for every
 algorithm (Renode is a deterministic emulator — verified with `tools/bench_10x.ps1`).
@@ -141,7 +141,7 @@ Cortex-M throughput, and no standard Ascon variant changes that.
 
 ## DTLS record-layer benchmark (per-record cycle cost)
 
-`tools/renode/bench_record.c` (`record_bench()`) measures the cost of
+`evaluation/renode/bench_record.c` (`record_bench()`) measures the cost of
 protecting **one DTLS 1.3 record** with `TLS13-ASCONAEAD128-ASCONHASH256` on
 the same Renode Cortex-M0+/M3 targets, using the same SysTick timing. Each
 line is one full `wc_AsconAEAD128` operation (`Init → SetKey → SetNonce →
@@ -203,7 +203,7 @@ bit-deterministic — verified with `tools/bench_10x.ps1`). Values are exact.
 
 ## QEMU triangulation (per-core dynamic instruction-count validation, 2026-08-23)
 
-> **Status:** QEMU 8.2.2 available in WSL (`wsl --user root apt install qemu-system-arm qemu-user`). Per-core dynamic counts via `timeout 10 qemu-system-arm -M <board> -nographic -kernel out/bench-<core>.elf -semihosting -singlestep -d exec -D /tmp/qemu-<core>.log` (`wc -l` = retired instr, singlestep). ELF rebuilt with `bkpt 0xAB` semihosting exit in `bench_main.c` (avoid timeout idle spin at `startup.s b 5b`; `tools/renode/bench_main.c:128-132`) and low header `0x2000D000/0x2000E000` (QEMU netduino2 has 64K RAM vs Renode 256K; see `tools/renode/probe/bench.ld` and `tools/renode/run_driver.ps1`). Full repro and board-limitation notes in `tools/qemu/triangulate.log` §7–8 and `tools/qemu/qemu.log`.
+> **Status:** QEMU 8.2.2 available in WSL (`wsl --user root apt install qemu-system-arm qemu-user`). Per-core dynamic counts via `timeout 10 qemu-system-arm -M <board> -nographic -kernel out/bench-<core>.elf -semihosting -singlestep -d exec -D /tmp/qemu-<core>.log` (`wc -l` = retired instr, singlestep). ELF rebuilt with `bkpt 0xAB` semihosting exit in `bench_main.c` (avoid timeout idle spin at `startup.s b 5b`; `evaluation/renode/bench_main.c:128-132`) and low header `0x2000D000/0x2000E000` (QEMU netduino2 has 64K RAM vs Renode 256K; see `evaluation/renode/probe/bench.ld` and `evaluation/renode/run_driver.ps1`). Full repro and board-limitation notes in `evaluation/qemu/triangulate.log` §7–8 and `evaluation/qemu/qemu.log`.
 
 **Board mapping & limitation (documented):**
 - `m0plus → mps2-an385` per task (Cortex-M3, *closest* for M0+ in this QEMU build; QEMU has no M0+ board with `FLASH 0x08000000`). `mps2-an385` expects flash at `0x00000000` (AN385 FPGA), so `bench.ld` at `0x08000000` faults (`Lockup HardFault R15=0`). Fallback to `netduino2` (STM32F205, Cortex-M3, flash `0x08000000`) for all cores — `netduino2` CPU is fixed `cortex-m3` (`-cpu cortex-m0` → `This board can only be used with cortex-m3`), so M0+ Thumb-1 expansion is not executed as M0, but M0+ *binary* still has 1.50× more Thumb-1 instructions vs M3 Thumb-2 (static proxy) and retires proportionally more instr in QEMU.
@@ -233,7 +233,7 @@ bit-deterministic — verified with `tools/bench_10x.ps1`). Values are exact.
 
 Alternative 10s run: `m0plus 4744139` / `m3 2243824` = **2.11× M0+/M3** (host-load variance). Earlier 8s window (high-header, pre-low) `m0plus 8217759` / `m3 8039624` = 1.022× (same-CPU artifact). Static proxy **1.50×** is the stable magnitude check; dynamic wall-window average 1.2–2.1× across runs brackets Renode.
 
-Full logs: `/tmp/qemu-m*` (10s, not committed) and `tools/qemu/qemu.log` (summary); singlestep makes one `Trace 0: …` per retired instr, without it one line per TB (92–355 TB vs 23k static vs 2–8M retired).
+Full logs: `/tmp/qemu-m*` (10s, not committed) and `evaluation/qemu/qemu.log` (summary); singlestep makes one `Trace 0: …` per retired instr, without it one line per TB (92–355 TB vs 23k static vs 2–8M retired).
 
 **Result — Renode magnitude confirmed:**
 - **M3/M4/M33 tied within <7%** in dynamic 10s window (6–7% above M3, 0.2% in static, 0% in Renode) — **well within ~15% target** for the tied cores. This matches Renode `m3/m4/m33 1.062 MiB/s / 1484.8 cyc/rec` identical.

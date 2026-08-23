@@ -4,7 +4,7 @@
 # Note: Full per-instr traces are ~2-7M lines per 10s window (singlestep, ~0.5M instr/s wall), not committed. This file is a summary.
 # Rebuild: ELF rebuilt with bkpt 0xAB semihosting exit in bench_main.c:128-132 and low header 0x2000D000/0x2000E000 (64K QEMU compat, see bench.ld).
 # Original intended command (from triangulate.ps1):
-#   qemu-system-arm -M mps2-an385 -nographic -kernel tools/renode/out/bench-m3.elf -d instr -D tools/qemu/qemu.log -semihosting
+#   qemu-system-arm -M mps2-an385 -nographic -kernel evaluation/renode/out/bench-m3.elf -d instr -D evaluation/qemu/qemu.log -semihosting
 # Actual working command (mps2-an385 faults at 0x08000000; netduino2/stm32vldiscovery map 0x08000000 correctly):
 #   timeout 10 qemu-system-arm -M <board> -nographic -kernel out/bench-<core>.elf -semihosting -singlestep -d exec -D /tmp/qemu-<core>.log && wc -l /tmp/qemu-<core>.log
 # QEMU system-mode has no -d instr (user-mode only); with -singlestep, -d exec logs one line per retired instruction (closest to instr count).
@@ -34,4 +34,4 @@
 # - bkpt #0xAB at bench_main.c:128 (movs r0,#0x18; ldr r1,=0x20026; bkpt) traps QEMU -semihosting (ADP_Stopped_ApplicationExit) and exits cleanly when bench completes (avoids startup.s b 5b idle spin). Bench full run >60s wall in singlestep, so timeout 10 still needed for window counts; longer or record-only bench would exit via bkpt before timeout.
 # - Without -singlestep, TB counts 92-355 vs static 23k vs dynamic 2-7M — TB << instr. With -singlestep, exec lines ~5-7M in 10s (~0.5M instr/s wall), vs static 23k (code size) — dynamic >> static as expected (loop iterates).
 # - For per-core Thumb-1 vs Thumb-2 code density, static proxy 1.50x (34653/23077) is the stable magnitude check; QEMU wall-window 0.84-2.11x is host-variant but same direction (more Thumb-1 instr ↔ slower). See triangulate.log for cross-core proxy and Renode 1.78-2.23x.
-# Repro: wsl -- bash -c 'timeout 10 qemu-system-arm -M netduino2 -nographic -kernel /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/tools/renode/out/bench-m3.elf -semihosting -singlestep -d exec -D /tmp/qemu-m3.log -semihosting; wc -l /tmp/qemu-m3.log'
+# Repro: wsl -- bash -c 'timeout 10 qemu-system-arm -M netduino2 -nographic -kernel /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/evaluation/renode/out/bench-m3.elf -semihosting -singlestep -d exec -D /tmp/qemu-m3.log -semihosting; wc -l /tmp/qemu-m3.log'

@@ -274,7 +274,7 @@ not, and how to re-run the check.
 ### 7.1 Machine-checked (Coq / Rocq 9.1.1)
 
 The **integer combinatorial core** of the bound is now machine-verified in
-`tools/coq/mask_prf.v` (no `Admitted`; all goals closed, `coqc` returns exit 0):
+`formal/coq/mask_prf.v` (no `Admitted`; all goals closed, `coqc` returns exit 0):
 
 - `count_coll_ub q U : 2 * count_coll q U <= q * (q - 1) * U ^ (q - 1)`.
   This is the birthday collision bound in its exact integer form — the combinatorial
@@ -303,7 +303,7 @@ The **integer combinatorial core** of the bound is now machine-verified in
 Re-run:
 
 ```
-wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/tools/coq && coqc mask_prf.v'
+wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/formal/coq && coqc mask_prf.v'
 ```
 
 The Coq install (`opam install coq`, Rocq 9.1.1, OCaml 5.1.0) is reachable in WSL even though
@@ -314,7 +314,7 @@ is exactly the `coll_prob` term in Theorem 2.
 #### 7.1.1 Game-hop core machine-checked (FCF)
 
 The **hybrid/game-hop step** of the keyed-sponge reduction is now machine-verified in
-`tools/coq/mask_prf_fcf.v` using the **FCF** (Formally Correct Foundations) Coq framework
+`formal/coq/mask_prf_fcf.v` using the **FCF** (Formally Correct Foundations) Coq framework
 (built from source at `/root/fcf-master`, `make` exit 0 under Rocq 9.1.1; no `Admitted`):
 
 - `realMask_nodup_eq ls f : NoDup ls → (∀ d', in_keys d' f = true → ¬In d' ls) →
@@ -340,7 +340,7 @@ The **hybrid/game-hop step** of the keyed-sponge reduction is now machine-verifi
 Re-run:
 
 ```
-wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/tools/coq && coqc -R /root/fcf-master/src "" mask_prf_fcf.v'
+wsl -u root -e bash -lc 'eval "$(opam env)"; cd /mnt/c/Users/manoh/OneDrive/Desktop/ascon-dtls/formal/coq && coqc -R /root/fcf-master/src "" mask_prf_fcf.v'
 ```
 
 (FCF must be present at `/root/fcf-master`; rebuild with
@@ -366,7 +366,7 @@ Three steps remain asserted by hand and are flagged as assumptions in the Coq st
 #### 7.1.2 Total-probability averaging lemma machine-checked (FCF)
 
 The remaining probabilistic hand step of `Hreducible`, §7.2 item 1(a), is now proven in
-`tools/coq/mask_prf_fcf.v` (no `Admitted`; `Print Assumptions mask_prf_fcf.averaging`
+`formal/coq/mask_prf_fcf.v` (no `Admitted`; `Print Assumptions mask_prf_fcf.averaging`
 reports *Closed under the global context*):
 
 - `repeatRnd q`: `q` iid uniform capacity samples; `DupEvent q`: the collision event
@@ -417,8 +417,8 @@ reports *Closed under the global context*):
 
 **Update:** EasyCrypt is no longer blocked in this environment. The `5.1.0` opam switch
 now carries `easycrypt ~dev` pinned at `git+file:///root/easycrypt#main` (commit
-`ef1b407`), with `why3 1.8.2` and `Z3 4.13.4`. The scaffold at `tools/easycrypt/mask_prf.ec`
-**passes `easycrypt compile` with exit 0** (evidence: `tools/easycrypt/mask_prf.compile.log`,
+`ef1b407`), with `why3 1.8.2` and `Z3 4.13.4`. The scaffold at `formal/easycrypt/mask_prf.ec`
+**passes `easycrypt compile` with exit 0** (evidence: `formal/easycrypt/mask_prf.compile.log`,
 ~100% progress, no `critical`).
 
 What is machine-checked in EasyCrypt:
