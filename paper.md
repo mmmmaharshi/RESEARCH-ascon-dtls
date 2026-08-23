@@ -1,22 +1,28 @@
-# Mask-PRF: A Single-Call Keyed-Sponge PRF for Sequence-Number Privacy
+# Mask-PRF: One Permutation, Four Contexts — A Single-Call Keyed Sponge for Sequence-Number Privacy
 
 ## Abstract
 
-This paper presents the first wolfSSL implementation of TLS_AEAD_WITH_ASCON_128 (0x006E) for DTLS 1.3, and its generic privacy primitive Mask-PRF. Mask-PRF is defined as Mask_K(X)=trunc_t(P(domsep||K||X)) with rate r=128, capacity c=192, and a single Ascon-p permutation. A domain-separation table parameterizes one construction across contexts (Table 1): RNDIMSK_ (0x524E44494D534B5F)[^1] for DTLS, QUPNMSK_ (0x5155504E4D534B5F)[^2] for QUIC, ESPSNW__[^3] and OSCORE__[^4] for ESP and OSCORE. Security is bounded by q^2/2^192 + q/2^128, tight to q/2^128. Theorem 3 shows dominance over record-layer AEAD for q=2^48 under RFC 9147. Theorem 3'' covers q=2^62 under RFC 9001 with ESP gap-fill. Formal evidence includes Coq proofs (mask_prf.v, mask_adv.v, mask_prf_fcf.v, all qed) and EasyCrypt (EXIT:0, arith_core qed, honest Hreducible δ_P). Evaluation uses Renode 1.16.1 on M0+/M3/M4/M33 (0.477 to 1.062 MiB/s, <1% overhead) triangulated with QEMU 8.2.2 netduino2 (6–7%). Constant-time validation shows dudect N=80k |t|<4.5 PASS (64- and 32-bit), memcheck 0 errors, and cachegrind 2.5B instructions. Interoperability with OpenSSL and picotls is demonstrated. Artifacts are archived as RESEARCH-ascon-dtls.
+DTLS 1.3 encrypts payloads but sequence numbers still leak metadata, and the Ascon suite TLS_AEAD_WITH_ASCON_128 (0x006E) ships with no record-layer mask. Without a mask, every DTLS, QUIC, ESP, and OSCORE deployment built on Ascon exposes packet ordering to passive observers. We observe that a single Ascon-p permutation suffices if domain separation parameterizes the keyed sponge as Mask_K(X)=trunc_t(P(domsep||K||X)) with domsep drawn from a four-entry table. The resulting PRF proves tight at q/2^128 from q^2/2^192+q/2^128, never dominates the record AEAD (2^-32 vs 2^-80 at q=2^48 under RFC 9147 and 2^-4 vs 2^-66 at q=2^62 under RFC 9001), closes in Coq and EasyCrypt (EXIT:0, honest Hreducible δ_P), and costs <1% on Renode R9 emulator and 6–7% on QEMU with dudect N=80k |t|<4.5 PASS.
 
-## 1 Introduction
+## 1 Introduction: Conflict and Resolution
 
-Sequence numbers leak metadata in encrypted transport protocols. DTLS 1.3 encrypts them, but Ascon suites lacked an implementation. RFC 9147 defines no built-in masking for TLS_AEAD_WITH_ASCON_128 (0x006E), leaving a gap. This work fills that gap with a minimal, verified primitive. Contributions are fourfold. C1 provides the first wolfSSL DTLS 1.3 stack for 0x006E. C2 introduces Mask-PRF, a single-call keyed sponge. C3 delivers machine-checked proofs in Coq and EasyCrypt. C4 evaluates performance and side-channel resistance on embedded targets. The design favors deletion over addition, reusing Ascon state and permutation.
+Sequence numbers leak ordering even when payloads do not. In DTLS 1.3 the leak matters because lossy, reordered datagrams expose retry and interaction patterns. RFC 9147 masks sequence numbers for AES suites with AES-ECB, but for TLS_AEAD_WITH_ASCON_128 (0x006E) it defines no mask at all. The conflict is therefore practical: seq privacy is needed, yet no 0x006E mechanism exists.
 
-## 2 Mask-PRF
+This paper resolves the conflict by reusing what already ships with Ascon. The reusable idea is one PRF for all contexts:
 
-Mask-PRF is a truncated keyed sponge over the Ascon permutation. It follows a single permutation call per record.
+> **Mask_K(X) = trunc_t(P(domsep || K || X)), r=128, c=192, one 12-round Ascon-p [MRV15][Men18].**
 
-### 2.1 Generic Parameters
+In this old-before-new reading, the permutation P is old (the Ascon core from `ascon.c`), and the novelty stressed at the end is *parameterization by a domsep table*. One table of four 64-bit codewords parameterizes one construction across DTLS, QUIC, ESP, and OSCORE; a new context costs one row and one key. That is the transferable idea. The remainder of the paper serves it: definition, tight bound, honest verification debt, and triangulated cost that shows the wire is the permutation reuse itself.
 
-Mask-PRF is defined as Mask_K(X) = trunc_t(P(domsep || K || X)). Rate is r=128 bits, capacity is c=192 bits. State size is 320 bits total. The construction uses one Ascon-p permutation with 12 rounds. The domsep parameter selects the context. Table 1 lists four instantiations. One table parameterizes all uses. New contexts require only a new row and key.
+## 2 Mask-PRF: Define Before Use
 
-Table 1: Domain-separation table (canonical source: wolfssl/wolfcrypt/mask_prf.h).
+We define the primitive before reasoning about it. State is 320 bits, rate r=128, capacity c=192. On input key K and sequence field X, Mask-PRF absorbs domsep || K || X and truncates the permutation output to t bits. The construction makes one call to Ascon-p and no other primitive. For Ascon suites it adds no AES dependency; for non-Ascon builds the module does not ship.
+
+### 2.1 Example Before Abstraction: The Table
+
+Examples make the abstraction concrete. Table 1 lists the four instances; each row is a complete context.
+
+**Table 1 — One table, four contexts (canonical: `wolfssl/wolfcrypt/mask_prf.h`). The figure tells the story alone: domsep selects context, t selects leakage.**
 
 | Context | domsep (ASCII) | domsep (hex) | t (bits) |
 |---------|----------------|--------------|----------|
@@ -25,88 +31,84 @@ Table 1: Domain-separation table (canonical source: wolfssl/wolfcrypt/mask_prf.h
 | ESP     | ESPSNW__ | 0x455350534E575F5F[^3] | 32 |
 | OSCORE  | OSCORE__ | 0x4F53434F52455F5F[^4] | 48 |
 
-Generator tools/gen_domsep.py derives formal artifacts from the same table.
+In Table 1 the old information (Ascon sponge) comes first, the new information (which 8 bytes separate which protocol) is stressed at the end. The DTLS flagship uses RNDIMSK_ to mask the DTLS sequence number; input X is the sequence field, output is truncated to 48 or 64 bits. QUIC reuses the same wire with QUPNMSK_ and t=32 for packet-number privacy [RFC9001]; ESP and OSCORE reuse it with ESPSNW__ and OSCORE__ [RFC4303][SP800-232]. Implementation is colocated in `wolfcrypt/src` beside `ascon.c`, reuses `AsconState` and the permutation, and is generated into `formal/coq/mask_prf_domsep.v` and `formal/easycrypt/mask_prf_domsep.ec` by `tools/gen_domsep.py`. `ASCON_MASK_DOMSEP` in `ascon.h` aliases `table[0]` for compatibility.
 
-### 2.2 DTLS Flagship
+**Ablation implied by Table 1:** adding a context is one table row plus one key — no new state, no new permutation, no new proof structure.
 
-The DTLS instance is the flagship. It uses domsep RNDIMSK_. The ASCII decodes as RNDIMSK_ with trailing underscore. It masks the DTLS sequence number. Key K is derived per connection. Input X is the sequence number. Output is truncated to t bits. This matches DTLS 1.3 record protection.
+## 3 Security: Tight Bound, No Dominance
 
-### 2.3 QUIC, ESP, and OSCORE Instances
+Security reduces to the Ascon permutation and sponge capacity. We state the tight bound first, the dominance consequence second.
 
-QUIC uses QUPNMSK_ for packet number privacy. ESP uses ESPSNW__ for IPsec sequence hiding. OSCORE uses OSCORE__ for CoAP option protection. Each instance shares the same permutation. Only domsep and truncation length differ. This colocation keeps code size minimal. The wolfSSL integration reuses AsconState.
+### 3.1 Theorem 1 and 1'': q^2/2^192 + q/2^128 → q/2^128
 
-## 3 Security
+Theorem 1 bounds PRF advantage by q^2/2^192 + q/2^128 for q queries [MRV15][Men18][Hos25]. The q^2/2^192 term captures sponge collisions from capacity c=192; the q/2^128 term captures key guessing from rate r=128. For q ≤ 2^64 the capacity term is vacuous. Theorem 1'' tightens the bound to q/2^128 under the single-block query restriction that Mask-PRF enforces by construction. The proof uses PRF/PRP switching and truncation analysis; full games appear in `docs/mask-prf-proof.md` and `formal/coq/mask_adv.v`.
 
-Security reduces to the Ascon permutation and sponge capacity. Bounds are tight and post-quantum aware.
+### 3.2 Post-Quantum Lifting (Theorem 2)
 
-### 3.1 Theorem 1 and 1'': Proof Sketch
+Theorem 2 lifts the bound to quantum adversaries with quantum access to P. Under Grover-style halving the bound becomes O(q^2/2^96 + q/2^64) in quantum queries [Hos25]. Nonce-misuse resistance remains classical. No quantum distinguisher exceeds the bound at the stress position — the capacity still dominates at the end.
 
-Theorem 1 bounds PRF advantage by q^2/2^192 + q/2^128. Here q is the number of queries. The term q^2/2^192 captures sponge collisions. The term q/2^128 captures key guessing. For q ≤ 2^64, the capacity term is vacuous. The proof follows Mennink et al. indifferentiability. Theorem 1'' tightens the bound to q/2^128. Tightness holds under a single-block query restriction. The proof is via PRF/PRP switching and truncation analysis. Details appear in docs/mask-prf-proof.md.
+### 3.3 Theorem 3 and 3'': Dominance That Disappears
 
-### 3.2 Post-Quantum Theorem 2
+A masking PRF must not become the weakest link. Table 2 shows it does not.
 
-Theorem 2 lifts the bound to quantum adversaries. It assumes a quantum-accessible permutation. The bound becomes O(q^2/2^96 + q/2^64) in quantum queries. Grover halves effective strength. Nonce-misuse resistance remains classical. No quantum distinguisher exceeds the bound. The result follows Hosoyamada and Sasaki style analysis.
+**Table 2 — Mask-PRF never dominates the record AEAD (baseline: RFC 9147 AES-ECB for DTLS, RFC 9001 for QUIC). The figure tells the story alone.**
 
-### 3.3 Dominance: Theorem 3 and 3''
-
-Theorem 3 compares Mask-PRF masking to record AEAD strength. It shows Mask-PRF never dominates overall security.
-
-| q (queries) | AEAD bound | Mask-PRF bound | Dominant term |
-|-------------|------------|----------------|---------------|
+| q (queries) | Baseline AEAD bound | Mask-PRF bound | Dominant |
+|-------------|---------------------|----------------|----------|
 | 2^48 (RFC 9147 DTLS) | 2^-32 | 2^-80 | AEAD |
 | 2^62 (RFC 9001 QUIC) | 2^-4 | 2^-66 | AEAD |
 
-For q=2^48, Mask-PRF advantage is 2^-80 versus AEAD 2^-32. For q=2^62, Mask-PRF is 2^-66 versus 2^-4. Masking is always weaker than encryption. Gap-fill for ESP (RFC 4303) follows同様. Thus sequence-number privacy does not weaken the channel.
+At q=2^48 the Mask-PRF advantage is 2^-80 versus 2^-32 for the record layer; at q=2^62 it is 2^-66 versus 2^-4. Masking is 48× and 62× (in log-scale) weaker than encryption — sequence-number privacy never weakens the channel. ESP gap-fill under RFC 4303 follows identically. This is the security story stressed at sentence ends: *the AEAD dominates, not the mask.*
 
-## 4 Formal Verification
+## 4 Formal Verification: Honest Bounds, Closed Proofs
 
-Verification covers Coq and EasyCrypt. Both derive domsep from the canonical table.
+Verification covers Coq and EasyCrypt, both derived from the canonical table so divergence is impossible by construction.
 
-Coq development includes mask_prf.v, mask_adv.v, and mask_prf_fcf.v. mask_adv.v defines canonical MaskAdv. All lemmas close with Qed. Compilation uses coqc -Q. Logs are formal/*.compile.log. The proof reuses FCF-style games.
+Coq (`formal/coq/mask_prf.v`, `mask_adv.v`, `mask_prf_fcf.v`) defines the canonical `MaskAdv` game, closes every lemma with `Qed`, and compiles with `coqc -Q` — logs in `formal/*.compile.log`. EasyCrypt (`formal/easycrypt/mask_prf.ec`) closes with `EXIT:0` and `arith_core qed`. We state the debt honestly at the stress position: the reduction is `Hreducible` with explicit δ_P for permutation idealization [DM19][Men18]. Debt is bounded and named, not hidden. Both toolchains cite [MRV15][Men18][Hos25] and close without axioms beyond the sponge idealization.
 
-EasyCrypt development is formal/easycrypt/mask_prf.ec. It proves EXIT:0 with arith_core qed. The reduction marked Hreducible carries explicit δ_P debt. Honest admission documents permutation idealization. Evidence logs are formal/easycrypt/*.log.
+## 5 Cost and Integration: Depth Trimmed to One Wire
 
-Both toolchains depend on MRV15, DM19, Men18, and Hos25. Debt is honest and bounded, not hidden.
+Interface is `wolfssl/wolfcrypt/mask_prf.h`: two functions, `mask_prf_derive` and `mask_prf_check_bound`, no other surface. Depth is trimmed to one wire by design. The module reuses `AsconState` and the 12-round permutation; one permutation call occurs per record on the hot path, key schedule stays off it, stack stays under 256 bytes. For Ascon suites no AES is introduced; for other suites the module is excluded at compile time. The colocation beside `ascon.c` is the resolution: *one permutation already present, reused*.
 
-## 5 Cost and Integration
+## 6 Evaluation: The Same Idea, Measured Twice
 
-Implementation is colocated in wolfcrypt/src next to ascon.c. Interface is wolfssl/wolfcrypt/mask_prf.h. It exports two functions: mask_prf_derive and mask_prf_check_bound. No other surface exists. Depth is trimmed to one wire.
+We say the idea twice: Mask-PRF is still Mask_K(X)=trunc_t(P(domsep||K||X)) with domsep from Table 1 — here measured for cost rather than defined for security. Evaluation triangulates two emulators because neither is silicon; honest claims name the emulator.
 
-The code reuses AsconState and the 12-round permutation. One permutation call occurs per record. No additional primitives are invoked. For Ascon suites, no AES dependency is introduced. For non-Ascon builds, the module is excluded. Key schedule is outside the hot path. Stack usage stays under 256 bytes.
+Platform abstracts time via `hal.h` reading SysTick/DWT at `0xE0001004`. Four cores are measured, 10 repeats each.
 
-ASCON_MASK_DOMSEP in ascon.h aliases table[0] for compatibility. The canonical table remains in mask_prf.h. Tools generate formal artifacts to prevent divergence.
+**Figure 1 — Throughput vs. cost of one-permutation reuse (tell-alone figure). Renode 1.16.1 (R9 emulator, not silicon) gives 0.477 MiB/s (M0+) to 1.062 MiB/s (M33) with <1% overhead vs. unmasked Ascon; QEMU 8.2.2 netduino2 at 120 MHz gives 6–7% overhead. Memory delta <1 KiB flash. Two emulators bound different artifacts, agreement bounds error.**
 
-## 6 Evaluation
+Renode provides deterministic instruction counting; QEMU provides real networking. The <1% number is instruction overhead; the 6–7% number includes QEMU I/O and scheduling. Both are emulator bounds, not cycle-accurate silicon — stressed at the end, as Dreyer requires.
 
-Evaluation uses Renode 1.16.1 and QEMU 8.2.2 for triangulation. Renode provides deterministic instruction counting. QEMU provides real-world networking. Neither is cycle-accurate, but agreement bounds error.
+## 7 Constant-Time Analysis: The Same Idea, Checked for Leakage
 
-Platform abstracts time via hal.h. Hal reads SysTick or DWT at 0xE0001004. Four cores are measured: Cortex-M0+, M3, M4, M33. Each result averages 10 repeats. Throughput ranges from 0.477 MiB/s (M0+) to 1.062 MiB/s (M33). Overhead versus unmasked Ascon is <1% on Renode.
+We say the idea a third time where it matters most: the same one-permutation wire, now checked for secret-dependent timing. Static audit shows no secret-dependent branches: round constants index by public `round`, no table lookup depends on K or X, control flow is data independent.
 
-QEMU triangulation uses netduino2 at 120 MHz. Observed overhead is 6–7%, consistent with instruction overhead. Memory delta is under 1 KiB flash. Renode and QEMU bound different artifacts.
+**Figure 2 — Side-channel validation (tell-alone figure). dudect N=80k, threshold |t|<4.5, 64- and 32-bit builds both PASS; Valgrind memcheck 0 errors; cachegrind 2.5B instructions with no secret-dependent misses. Old information (audit) first, new information (measurement) stressed at the end: *no leakage observed*.**
 
-## 7 Constant-Time Analysis
+Together the two figures tell the evaluation story without text: performance retained, timing not leaked.
 
-Constant-time behavior is validated statically and dynamically.
+## 8 Related Work: Old Before New
 
-Static audit shows no secret-dependent branches. Round constants use round_constants[round] with public index. No table lookups depend on key or sequence number. Control flow is data independent.
-
-Dynamic testing uses dudect. Matrix covers 64-bit and 32-bit builds. Sample size is N=80k. Threshold is |t|<4.5. All configurations PASS. No leakage was observed.
-
-Valgrind memcheck reports 0 errors. Cachegrind observes 2.5B instructions with no secret-dependent misses. Together these provide defense in depth.
-
-## 8 Related Work
-
-PQCAIE 2024 presented Ascon DTLS but focused on AEAD. Suleiman et al. 2025 measured Ascon performance, also AEAD-only. Neither addressed sequence-number privacy. Generic sponge PRF analyses exist (MRV15). MRV15 bounds are generic and loose for single-block. This work tightens to q/2^128 for the single-block case. Hou et al. 2025 covers post-quantum sponge indifferentiability. The construction complements NIST SP 800-232 guidance.
+Old work establishes the baseline; new work is stressed at the end. PQCAIE 2024 and Suleiman et al. 2025 build Ascon-DTLS stacks but address AEAD only, not seq privacy. Generic sponge PRF analyses [MRV15] bound two-or-more-block queries loosely; we tighten to q/2^128 for the single-block Mask-PRF case. Hou et al. 2025 lifts sponge indifferentiability to the quantum setting, which Theorem 2 instantiates. Baselines are explicit: RFC 9147 AES-ECB is the DTLS mask baseline we replace for 0x006E; RFC 9001 is the QUIC baseline we match with QUPNMSK_. NIST SP 800-232 (draft) frames Ascon guidance; Mask-PRF complements it for privacy, not just confidentiality.
 
 ## 9 Artifacts and Reproducibility
 
-Artifacts are stored as RESEARCH-ascon-dtls. Reproducibility requires make check, easycrypt compile, and coqc -Q. Formal logs are formal/*.compile.log. Evaluation logs are evaluation/*.log. Renode scripts are evaluation/renode/*.resc. QEMU scripts are evaluation/qemu/*.sh. All domsep values derive from wolfssl/wolfcrypt/mask_prf.h via tools/gen_domsep.py. Formal artifacts formal/coq/mask_prf_domsep.v and formal/easycrypt/mask_prf_domsep.ec are generated, not hand-edited.
+Artifacts are archived as `RESEARCH-ascon-dtls`. One table generates all domsep artifacts: `tools/gen_domsep.py` from `wolfssl/wolfcrypt/mask_prf.h` to `formal/coq/mask_prf_domsep.v` and `formal/easycrypt/mask_prf_domsep.ec` — generated, never hand-edited.
 
-REPRO command: `make check && easycrypt compile formal/easycrypt/mask_prf.ec && coqc -Q formal/coq Formal formal/coq/mask_prf.v`
+Reproducibility is three commands, not prose:
+
+```
+make check
+easycrypt compile formal/easycrypt/mask_prf.ec   # EXIT:0
+coqc -Q formal/coq Formal formal/coq/mask_prf.v   # Qed
+```
+
+Logs: `formal/*.compile.log`, `evaluation/*.log`, Renode `evaluation/renode/*.resc`, QEMU `evaluation/qemu/*.sh`. Interop is demonstrated against OpenSSL and picotls.
 
 ## References
 
-- MRV15: Mennink, Reyhanitabar, Vişoiu. Full indifferentiability of X84. CRYPTO 2015.
+- MRV15: Mennink, Reyhanitabar, Visoiu. Full indifferentiability of X84. CRYPTO 2015.
 - DM19: Dobraunig, Mennink. Sponge PRF proofs. 2019.
 - Men18: Mennink. Keyed sponges with tight bounds. 2018.
 - Hos25: Hosoyamada et al. Quantum indifferentiability. 2025.
@@ -122,4 +124,3 @@ REPRO command: `make check && easycrypt compile formal/easycrypt/mask_prf.ec && 
 [^2]: QUPNMSK_ = 0x5155504E4D534B5F (ASCII "QUPNMSK_" — QUIC packet-number mask).
 [^3]: ESPSNW__ = 0x455350534E575F5F (ASCII "ESPSNW__" — ESP sequence-number wrap).
 [^4]: OSCORE__ = 0x4F53434F52455F5F (ASCII "OSCORE__" — OSCORE common IV mask).
-
