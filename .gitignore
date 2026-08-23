@@ -25,6 +25,13 @@ Thumbs.db
 # Vendored dependency: wolfSSL is its own git repository (holds the Ascon-DTLS
 # fork). Not vendored here; kept as a sibling checkout.
 wolfssl/
+# Exception: canonical Mask-PRF module is owned by this repo (F1 deepening)
+!wolfssl/wolfcrypt/
+!wolfssl/wolfcrypt/src/
+!wolfssl/wolfcrypt/src/mask_prf.c
+!wolfssl/wolfssl/
+!wolfssl/wolfssl/wolfcrypt/
+!wolfssl/wolfssl/wolfcrypt/mask_prf.h
 
 # Coq build artifacts (mask_prf.v is the source — keep it tracked)
 formal/coq/*.vo

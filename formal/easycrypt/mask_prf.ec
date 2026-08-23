@@ -1,3 +1,4 @@
+(* canonical domsep: wolfssl/wolfcrypt/mask_prf.h — single source; generated via tools/gen_domsep.py -> formal/coq/mask_prf_domsep.v / formal/easycrypt/mask_prf_domsep.ec; ASCON_MASK_DOMSEP is alias to table[0] *)
 (* mask_prf.ec — EasyCrypt mechanization of the keyed-sponge record-number mask PRF.
  *
  * STATUS (honest, 2026-08-22 — easycrypt compile exits 0):

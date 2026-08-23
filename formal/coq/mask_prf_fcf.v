@@ -1,3 +1,4 @@
+(* canonical domsep: wolfssl/wolfcrypt/mask_prf.h — single source; generated via tools/gen_domsep.py -> formal/coq/mask_prf_domsep.v / formal/easycrypt/mask_prf_domsep.ec; ASCON_MASK_DOMSEP is alias to table[0] *)
 Require Import FCF.FCF.
 Require Import FCF.CompFold.
 Require Import FCF.ProgramLogic.
