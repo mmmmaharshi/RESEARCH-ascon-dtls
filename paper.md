@@ -10,11 +10,11 @@
 
 Sequence numbers leak ordering even when payloads do not. In DTLS 1.3 the leak matters because lossy, reordered datagrams expose retry and interaction patterns. RFC 9147 masks sequence numbers for AES suites with AES-ECB, but for TLS_AEAD_WITH_ASCON_128 (0x006E) it defines no mask at all. The conflict is therefore practical: seq privacy is needed, yet no 0x006E mechanism exists.
 
-This paper resolves the conflict by reusing what already ships with Ascon. The reusable idea is one PRF for all contexts:
+This paper resolves the conflict by reusing what already ships with Ascon. One PRF covers all contexts:
 
 > **Mask_K(X) = trunc_t(P(domsep || K || X)), r=128, c=192, one 12-round Ascon-p [MRV15][Men18].**
 
-In this old-before-new reading, the permutation P is old (the Ascon core from `ascon.c`), and the novelty stressed at the end is *parameterization by a domsep table*. One table of four 64-bit codewords parameterizes one construction across DTLS, QUIC, ESP, and OSCORE; a new context costs one row and one key. That is the transferable idea.
+The permutation P is the Ascon core (`ascon.c`); the novelty is parameterization by a domsep table. One table of four 64-bit codewords covers DTLS, QUIC, ESP, and OSCORE; a new context costs one row and one key.
 
 **Research questions.** RQ1: Can one Ascon-p call provide sequence-number privacy for DTLS, QUIC, ESP and OSCORE without adding AES? RQ2: What tight PRF bound does a fixed-capacity single-block keyed sponge achieve? RQ3: What is the embedded cost and constant-time status?
 
@@ -78,7 +78,7 @@ A masking PRF must not become the weakest link. Table 2 shows it does not.
 | 2^48 (RFC 9147 DTLS) | 2^-32 | 2^-80 | AEAD |
 | 2^62 (RFC 9001 QUIC) | 2^-4 | 2^-66 | AEAD |
 
-At q=2^48 the Mask-PRF advantage is 2^-80 versus 2^-32 for the record layer; at q=2^62 it is 2^-66 versus 2^-4. Masking is 48× and 62× (in log-scale) weaker than encryption — sequence-number privacy never weakens the channel. ESP gap-fill under RFC 4303 follows identically. This is the security story stressed at sentence ends: *the AEAD dominates, not the mask.*
+At q=2^48 the Mask-PRF advantage is 2^-80 versus 2^-32 for the record layer; at q=2^62 it is 2^-66 versus 2^-4. The AEAD dominates, not the mask. ESP gap-fill under RFC 4303 follows the same bound.
 
 ## 4 Formal Verification: Honest Bounds, Closed Proofs
 
@@ -88,11 +88,11 @@ Coq (`formal/coq/mask_prf.v`, `mask_adv.v`, `mask_prf_fcf.v`, `mask_prf_key.v`) 
 
 ## 5 Cost and Integration: Depth Trimmed to One Wire
 
-Interface is `wolfssl/wolfcrypt/mask_prf.h`: two functions, `mask_prf_derive` and `mask_prf_check_bound`, no other surface. Depth is trimmed to one wire by design. The module reuses `AsconState` and the 12-round permutation; one permutation call occurs per record on the hot path, key schedule stays off it, stack stays under 256 bytes. For Ascon suites no AES is introduced; for other suites the module is excluded at compile time. The colocation beside `ascon.c` is the resolution: *one permutation already present, reused*.
+Interface is `wolfssl/wolfcrypt/mask_prf.h` with two functions, `mask_prf_derive` and `mask_prf_check_bound`. The module reuses `AsconState` and the 12-round permutation; one call per record on the hot path, key schedule stays off it, stack under 256 bytes. No AES is introduced for Ascon suites; the module is excluded otherwise. One permutation already present is reused beside `ascon.c`.
 
 ## 6 Evaluation: The Same Idea, Measured Twice
 
-We say the idea twice: Mask-PRF is still Mask_K(X)=trunc_t(P(domsep||K||X)) with domsep from Table 1 — here measured for cost rather than defined for security. Evaluation triangulates two emulators because neither is silicon; honest claims name the emulator.
+Mask-PRF remains Mask_K(X)=trunc_t(P(domsep||K||X)) with domsep from Table 1 — here measured for cost. Evaluation triangulates two emulators because neither is silicon; claims name the emulator.
 
 Platform abstracts time via `hal.h` reading SysTick/DWT at `0xE0001004`. Four cores are measured, 10 repeats each (mean ± std, `gcc -O2`).
 
@@ -109,7 +109,7 @@ Platform abstracts time via `hal.h` reading SysTick/DWT at `0xE0001004`. Four co
 
 ## 7 Constant-Time Analysis: The Same Idea, Checked for Leakage
 
-We say the idea a third time where it matters most: the same one-permutation wire, now checked for secret-dependent timing. Static audit shows no secret-dependent branches: round constants index by public `round`, no table lookup depends on `K` or `X`, control flow is data independent. Builds: `gcc -O2` (64-bit) and `gcc -m32 -O2` (32-bit).
+The same one-permutation wire is checked for secret-dependent timing. Static audit shows no secret-dependent branches: round constants index by public `round`, no table lookup depends on `K` or `X`, control flow is data independent. Builds: `gcc -O2` (64-bit) and `gcc -m32 -O2` (32-bit).
 
 **Table 4 — Side-channel validation (N=80k per job, |t|=Welch t, threshold |t|<4.5).**
 
@@ -120,8 +120,6 @@ We say the idea a third time where it matters most: the same one-permutation wir
 | C | control random-vs-random | 1.24 | 2.13 | 1.95 | PASS (sanity) |
 
 *Valgrind `memcheck --track-origins=yes` `0 errors`, `cachegrind I refs 62,857,985` (98% in `derive`), no secret-dependent misses. Full harness `dudect` 64- and 32-bit both `PASS`.*
-
-Together Tables 3–4 tell the evaluation story without text: performance retained, timing not leaked.
 
 ## 8 Related Work
 
