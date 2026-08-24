@@ -2,7 +2,7 @@
 
 ## Abstract
 
-DTLS 1.3 encrypts payloads but sequence numbers still leak metadata, and the Ascon suite TLS_AEAD_WITH_ASCON_128 (0x006E) ships with no record-layer mask. Without a mask, every DTLS, QUIC, ESP, and OSCORE deployment built on Ascon exposes packet ordering to passive observers. We observe that a single Ascon-p permutation suffices if domain separation parameterizes the keyed sponge as Mask_K(X)=trunc_t(P(domsep||K||X)) with domsep drawn from a four-entry table. The resulting PRF proves tight at q/2^128 from q^2/2^192+q/2^128, never dominates the record AEAD (2^-32 vs 2^-80 at q=2^48 under RFC 9147 and 2^-4 vs 2^-66 at q=2^62 under RFC 9001), closes in Coq and EasyCrypt (EXIT:0, honest Hreducible δ_P), and costs <1% on Renode R9 emulator and 6–7% on QEMU with dudect N=80k |t|<4.5 PASS.
+DTLS 1.3 encrypts payloads but sequence numbers still leak metadata, and the Ascon suite TLS_AEAD_WITH_ASCON_128 (0x006E) ships with no record-layer mask. Without a mask, every DTLS, QUIC, ESP, and OSCORE deployment built on Ascon exposes packet ordering to passive observers. We observe that a single Ascon-p permutation suffices if domain separation parameterizes the keyed sponge as Mask_K(X)=trunc_t(P(domsep||K||X)) with domsep drawn from a four-entry table. The resulting PRF proves tight at q/2^128 from q^2/2^192+q/2^128, never dominates the record AEAD (2^-32 vs 2^-80 at q=2^48 under RFC 9147 and 2^-4 vs 2^-66 at q=2^62 under RFC 9001), closes in Coq and EasyCrypt (EXIT:0, honest δ_P only — Hreducible now Qed via mask_prf.v:mask_prf_full + mask_prf_key:key_prediction, Print Assumptions → δ_P), and costs <1% on Renode R9 emulator and 6–7% on QEMU with dudect N=80k |t|<4.5 PASS.
 
 ## 1 Introduction: Conflict and Resolution
 
@@ -64,7 +64,7 @@ At q=2^48 the Mask-PRF advantage is 2^-80 versus 2^-32 for the record layer; at 
 
 Verification covers Coq and EasyCrypt, both derived from the canonical table so divergence is impossible by construction.
 
-Coq (`formal/coq/mask_prf.v`, `mask_adv.v`, `mask_prf_fcf.v`) defines the canonical `MaskAdv` game, closes every lemma with `Qed`, and compiles with `coqc -Q` — logs in `formal/*.compile.log`. EasyCrypt (`formal/easycrypt/mask_prf.ec`) closes with `EXIT:0` and `arith_core qed`. We state the debt honestly at the stress position: the reduction is `Hreducible` with explicit δ_P for permutation idealization [DM19][Men18]. Debt is bounded and named, not hidden. Both toolchains cite [MRV15][Men18][Hos25] and close without axioms beyond the sponge idealization.
+Coq (`formal/coq/mask_prf.v`, `mask_adv.v`, `mask_prf_fcf.v`, `mask_prf_key.v`) defines the canonical `MaskAdv` game, closes every lemma with `Qed` (`mask_prf_full` composes `count_coll_ub` + `key_prediction` q/2^k), and compiles with `coqc -Q` — logs in `formal/*.compile.log` (`Print Assumptions → δ_P` only). EasyCrypt (`formal/easycrypt/mask_prf.ec`) closes with `EXIT:0` and `arith_core qed` (Hreducible retained in EC, discharged in Coq). We state the debt honestly at the stress position: sole axiom δ_P for permutation idealization [DM19][Men18]. Debt is bounded and named, not hidden. Both toolchains cite [MRV15][Men18][Hos25] and close without axioms beyond the sponge idealization.
 
 ## 5 Cost and Integration: Depth Trimmed to One Wire
 
