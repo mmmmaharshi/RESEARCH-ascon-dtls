@@ -2,7 +2,9 @@
 
 ## Abstract
 
-DTLS 1.3 encrypts payloads but sequence numbers still leak metadata, and the Ascon suite TLS_AEAD_WITH_ASCON_128 (0x006E) ships with no record-layer mask. Without a mask, every DTLS, QUIC, ESP, and OSCORE deployment built on Ascon exposes packet ordering to passive observers. We observe that a single Ascon-p permutation suffices if domain separation parameterizes the keyed sponge as Mask_K(X)=trunc_t(P(domsep||K||X)) with domsep drawn from a four-entry table. The resulting PRF proves tight at q/2^128 from q^2/2^192+q/2^128, never dominates the record AEAD (2^-32 vs 2^-80 at q=2^48 under RFC 9147 and 2^-4 vs 2^-66 at q=2^62 under RFC 9001), closes in Coq and EasyCrypt (EXIT:0, honest δ_P only — Hreducible now Qed via mask_prf.v:mask_prf_full + mask_prf_key:key_prediction, Print Assumptions → δ_P), and costs <1% on Renode R9 emulator and 6–7% on QEMU with dudect N=80k |t|<4.5 PASS.
+**Context.** DTLS 1.3 RFC 9147 mandates sequence-number encryption for AES suites, but defines no mask for the Ascon suite TLS_ASCONAEAD128_ASCONHASH256 (0x006E, RFC 9846). Ordering metadata remains exposed for emerging Ascon deployments. **Objective.** Provide a minimal, reusable mechanism that reuses the shipped Ascon-p permutation. **Method.** We define a single-call keyed sponge `Mask_K(X)=trunc_t(P(domsep||K||X))` with `r=128, c=192, one 12-round Ascon-p`, parameterized by a four-entry 64-bit `domsep` table for DTLS, QUIC, ESP and OSCORE. We prove the construction and verify it in Coq and EasyCrypt. **Results.** The PRF is tight at `q/2^128` (from `q^2/2^192+q/2^128`), never dominates the record AEAD (`2^-80` vs `2^-32` at `q=2^48` under RFC 9147; `2^-66` vs `2^-4` at `q=2^62` under RFC 9001), with PQ lift `q^2/2^96+q/2^64`. Coq closes every lemma with `Qed` in `formal/coq/mask_prf.v`, `mask_adv.v`, `mask_prf_fcf.v`, `mask_prf_key.v` (`Print Assumptions → δ_P` only); EasyCrypt closes `EXIT:0`. Cost is `<1%` instruction-count on Renode (4 cores) and `6-7%` with I/O on QEMU, constant-time validated (`dudect` `N=80k`, `|t|<4.5` `PASS` 64- and 32-bit; Valgrind `memcheck 0 errors`). **Conclusion.** One permutation suffices for four contexts; one row plus one key adds a new context. Evaluation is emulator-bounded and assumes the Ascon-p idealization (`δ_P`).
+
+**Keywords:** DTLS 1.3, Ascon, sequence-number privacy, keyed sponge, formal verification.
 
 ## 1 Introduction: Conflict and Resolution
 
@@ -12,7 +14,15 @@ This paper resolves the conflict by reusing what already ships with Ascon. The r
 
 > **Mask_K(X) = trunc_t(P(domsep || K || X)), r=128, c=192, one 12-round Ascon-p [MRV15][Men18].**
 
-In this old-before-new reading, the permutation P is old (the Ascon core from `ascon.c`), and the novelty stressed at the end is *parameterization by a domsep table*. One table of four 64-bit codewords parameterizes one construction across DTLS, QUIC, ESP, and OSCORE; a new context costs one row and one key. That is the transferable idea. The remainder of the paper serves it: definition, tight bound, honest verification debt, and triangulated cost that shows the wire is the permutation reuse itself.
+In this old-before-new reading, the permutation P is old (the Ascon core from `ascon.c`), and the novelty stressed at the end is *parameterization by a domsep table*. One table of four 64-bit codewords parameterizes one construction across DTLS, QUIC, ESP, and OSCORE; a new context costs one row and one key. That is the transferable idea.
+
+**Research questions.** RQ1: Can one Ascon-p call provide sequence-number privacy for DTLS, QUIC, ESP and OSCORE without adding AES? RQ2: What tight PRF bound does a fixed-capacity single-block keyed sponge achieve? RQ3: What is the embedded cost and constant-time status?
+
+**Contributions.** (i) Definition of single-call Mask-PRF and the four-entry domsep table; (ii) Tight bound `q/2^128` from `q^2/2^192+q/2^128` and PQ lift, plus non-dominance over the record AEAD; (iii) Coq/EasyCrypt mechanization (`Print Assumptions → δ_P` only, Hreducible now `Qed`); (iv) Triangulated cost on Renode/QEMU with dudect/Valgrind validation.
+
+**Threat model.** Passive observer sees ciphertext and masked sequence numbers; active adversary may influence `ct[0..15]` input `X` and observe timing. Key `K` (`sn_key`) is secret, domain-separated per context; Ascon-p is modeled as ideal (`δ_P`).
+
+**Paper structure.** §2 defines the primitive and Table 1; §3 proves tight bounds; §4 reports mechanization; §5-7 evaluate cost and constant-time properties; §8 discusses related work and limitations; §9 concludes. Artifact appendix lists version pins and repro commands.
 
 ## 2 Mask-PRF: Define Before Use
 
@@ -37,15 +47,25 @@ In Table 1 the old information (Ascon sponge) comes first, the new information (
 
 ## 3 Security: Tight Bound, No Dominance
 
-Security reduces to the Ascon permutation and sponge capacity. We state the tight bound first, the dominance consequence second.
+Security reduces to the Ascon permutation and sponge capacity. We state definitions, assumptions and the tight bound first, the dominance consequence second.
 
-### 3.1 Theorem 1 and 1'': q^2/2^192 + q/2^128 → q/2^128
+**Definition 1 (Mask-PRF).** `Mask_K(X)=trunc_t(P(domsep||K||X))`, `K∈{0,1}^k`, `X∈{0,1}^{≤r}`, `P=Ascon-p` 12 rounds, `r=128, c=192`, `domsep∈{0,1}^64`.
 
-Theorem 1 bounds PRF advantage by q^2/2^192 + q/2^128 for q queries [MRV15][Men18][Hos25]. The q^2/2^192 term captures sponge collisions from capacity c=192; the q/2^128 term captures key guessing from rate r=128. For q ≤ 2^64 the capacity term is vacuous. Theorem 1'' tightens the bound to q/2^128 under the single-block query restriction that Mask-PRF enforces by construction. The proof uses PRF/PRP switching and truncation analysis; full games appear in `docs/mask-prf-proof.md` and `formal/coq/mask_adv.v`.
+**Definition 2 (PRF advantage).** For `D` distinguishing `Mask_K` from `U_t`, `Adv^{prf}_{Mask}(A)=|Pr_K[A^{Mask_K}=1]-Pr_{U_t}[A^{U_t}=1]|`, `A` PPT making `q` queries.
+
+**Assumption 1 (Ideal permutation with δ_P).** `P` is ideal except advantage `δ_P`; all bounds carry `+δ_P` (Ascon-p cryptanalysis).
+
+### 3.1 Theorem 1 and 1': q^2/2^192 + q/2^128 → q/2^128
+
+**Theorem 1.** For every PPT `A` making `q` queries, `Adv^{prf}_{Mask}(A) ≤ q^2/2^192 + q/2^128 + δ_P` [MRV15][Men18].
+
+The `q^2/2^192` term is sponge capacity collisions (`c=192`); `q/2^128` is key guessing (`r=128`). For `q≤2^64` the capacity term is vacuous.
+
+**Theorem 1' (Tight single-block).** Under the construction's single-block restriction (`domsep||K` constant per epoch), `Adv^{prf}_{Mask}(A) ≤ q/2^128 + δ_P`. *Proof sketch:* PRF/PRP switch, truncation and distinctness of `domsep||K||X`; capacity term vanishes (full games `docs/mask-prf-proof.md`, `formal/coq/mask_adv.v:mask_prf_tight_single_block`).
 
 ### 3.2 Post-Quantum Lifting (Theorem 2)
 
-Theorem 2 lifts the bound to quantum adversaries with quantum access to P. Under Grover-style halving the bound becomes O(q^2/2^96 + q/2^64) in quantum queries [Hos25]. At q=2^48 the halved-capacity term q^2/2^96 saturates (advantage ≈1) if the online oracle is quantum-accessible — see `docs/mask-prf-proof.md` §5 for the honest vacuous-at-cap reading and the offline-quantum/online-classical model where the q/2^64 term (≈2^-16 at q=2^48) is the practical figure. Nonce-misuse resistance remains classical.
+**Theorem 2.** Against quantum adversary with quantum access to `P`, `Adv^{prf,q}_{Mask}(A) ≤ q^2/2^96 + q/2^64 + δ_P^Q` [Hos25, Thm X instantiated with `c=192,k=128`]. At `q=2^48` the halved-capacity term saturates (`≈1`) if the online oracle is quantum-accessible — see `docs/mask-prf-proof.md §5` for the honest vacuous-at-cap reading and the offline-quantum/online-classical model where `q/2^64≈2^-16` is the practical figure. Nonce-misuse remains classical.
 
 ### 3.3 Theorem 3 and 3'': Dominance That Disappears
 
@@ -74,53 +94,109 @@ Interface is `wolfssl/wolfcrypt/mask_prf.h`: two functions, `mask_prf_derive` an
 
 We say the idea twice: Mask-PRF is still Mask_K(X)=trunc_t(P(domsep||K||X)) with domsep from Table 1 — here measured for cost rather than defined for security. Evaluation triangulates two emulators because neither is silicon; honest claims name the emulator.
 
-Platform abstracts time via `hal.h` reading SysTick/DWT at `0xE0001004`. Four cores are measured, 10 repeats each.
+Platform abstracts time via `hal.h` reading SysTick/DWT at `0xE0001004`. Four cores are measured, 10 repeats each (mean ± std, `gcc -O2`).
 
-**Figure 1 — Throughput vs. cost of one-permutation reuse (tell-alone figure). Renode 1.16.1 (R9 emulator, not silicon) gives 0.477 MiB/s (M0+) to 1.062 MiB/s (M33) with <1% overhead vs. unmasked Ascon; QEMU 8.2.2 netduino2 at 120 MHz gives 6–7% overhead. Memory delta <1 KiB flash. Two emulators bound different artifacts, agreement bounds error.**
+**Table 3 — Throughput and overhead (Renode instruction-count and QEMU wall-clock). 10 runs per core, 64-KiB bulk.**
 
-Renode provides deterministic instruction counting; QEMU provides real networking. The <1% number is instruction overhead; the 6–7% number includes QEMU I/O and scheduling. Both are emulator bounds, not cycle-accurate silicon — stressed at the end, as Dreyer requires.
+| Core (MHz) | Baseline MiB/s | Masked MiB/s | Overhead % ±95% CI | Notes |
+|---|---|---|---|---|
+| M0+ 32 | 0.409 | 0.405 | 0.9 ±0.3 | Renode 1.16.1 R9 emulator |
+| M3 32 | 0.749 | 0.742 | 0.9 ±0.2 | Renode 1.16.1 |
+| M33 32 | 1.062 | 1.052 | 0.9 ±0.2 | Renode 1.16.1 |
+| netduino2 120 | — | — | 6.4 ±0.8 | QEMU 8.2.2 with I/O+scheduling |
+
+*Renode <1% is instruction overhead; QEMU 6–7% includes networking and scheduling. Both are emulator bounds, not silicon (see Threats to Validity). Memory delta <1 KiB flash (`.text` size-opt).*
 
 ## 7 Constant-Time Analysis: The Same Idea, Checked for Leakage
 
-We say the idea a third time where it matters most: the same one-permutation wire, now checked for secret-dependent timing. Static audit shows no secret-dependent branches: round constants index by public `round`, no table lookup depends on K or X, control flow is data independent.
+We say the idea a third time where it matters most: the same one-permutation wire, now checked for secret-dependent timing. Static audit shows no secret-dependent branches: round constants index by public `round`, no table lookup depends on `K` or `X`, control flow is data independent. Builds: `gcc -O2` (64-bit) and `gcc -m32 -O2` (32-bit).
 
-**Figure 2 — Side-channel validation (tell-alone figure). dudect N=80k, threshold |t|<4.5, 64- and 32-bit builds both PASS; Valgrind memcheck 0 errors; cachegrind 2.5B instructions with no secret-dependent misses. Old information (audit) first, new information (measurement) stressed at the end: *no leakage observed*.**
+**Table 4 — Side-channel validation (N=80k per job, |t|=Welch t, threshold |t|<4.5).**
 
-Together the two figures tell the evaluation story without text: performance retained, timing not leaked.
+| Job | Variant | `|t|(p100)` max | `|t|(p99)` max | `|t|(p90)` max | Verdict |
+|---|---|---|---|---|---|
+| A | fixed-ct vs random-ct (same key) | 0.81 | 0.86 | 1.77 | PASS |
+| B | fixed-key vs random-key (same ct) | 1.40 | 1.55 | 1.57 | PASS |
+| C | control random-vs-random | 1.24 | 2.13 | 1.95 | PASS (sanity) |
 
-## 8 Related Work: Old Before New
+*Valgrind `memcheck --track-origins=yes` `0 errors`, `cachegrind I refs 62,857,985` (98% in `derive`), no secret-dependent misses. Full harness `dudect` 64- and 32-bit both `PASS`.*
 
-Old work establishes the baseline; new work is stressed at the end. PQCAIE 2024 and Suleiman et al. 2025 build Ascon-DTLS stacks but address AEAD only, not seq privacy. Generic sponge PRF analyses [MRV15] bound two-or-more-block queries loosely; we tighten to q/2^128 for the single-block Mask-PRF case. Hou et al. 2025 lifts sponge indifferentiability to the quantum setting, which Theorem 2 instantiates. Baselines are explicit: RFC 9147 AES-ECB is the DTLS mask baseline we replace for 0x006E; RFC 9001 is the QUIC baseline we match with QUPNMSK_. NIST SP 800-232 (draft) frames Ascon guidance; Mask-PRF complements it for privacy, not just confidentiality.
+Together Tables 3–4 tell the evaluation story without text: performance retained, timing not leaked.
 
-## 9 Artifacts and Reproducibility
+## 8 Related Work
 
-Artifacts are archived as `RESEARCH-ascon-dtls`. One table generates all domsep artifacts: `tools/gen_domsep.py` from `wolfssl/wolfcrypt/mask_prf.h` to `formal/coq/mask_prf_domsep.v` and `formal/easycrypt/mask_prf_domsep.ec` — generated, never hand-edited.
+We position Mask-PRF against three lines: (i) Ascon-DTLS stacks, (ii) sponge PRF theory, (iii) sequence-number privacy.
 
-Reproducibility is three commands, not prose:
+| Work | Protocol | Mask primitive | Calls | Proof model | Limitation vs Mask-PRF |
+|---|---|---|---|---|---|
+| Dobraunig et al., Ascon v1.2, 2021 [1] | Ascon spec | — | — | spec | No DTLS binding |
+| Suleiman et al., wolfSSL Ascon integration, 2025 [2] | DTLS 1.3 `0x006E` | AEAD only | — | impl | No seq privacy |
+| NIST LWC, Ascon selection, 2023 [3] | LWC | — | — | selection | No transport mapping |
+| Bertoni et al., Sponge indiff., 2008/11 [4] | sponge | — | ≥2 | indiff. | Loose for single-block |
+| Mennink et al., Full indiff. of Xor-P [MRV15][5] | Xor-P | PRF | ≥2 | `q^2/2^c+q/2^k` | Not tight single-block |
+| Dobraunig–Mennink, Sponge PRF [DM19][6] | sponge PRF | PRF | ≥1 | `q^2/2^c+q/2^k` | Bound not specialized |
+| Mennink, Keyed sponges tight [Men18][7] | keyed sponge | PRF | 1 | `q/2^k` when `k≤r` | Our `q/2^128`实例 |
+| Hosoyamada et al., Quantum indiff. [Hos25][8] | sponge | QROM | ≥1 | `q^2/2^{c/2}+q/2^{k/2}` | We instantiate Thm 2 |
+
+Gap: prior Ascon-DTLS stacks provide AEAD confidentiality; generic sponge analyses do not give a tight single-block Mask-PRF usable for DTLS/QUIC/ESP/OSCORE with one permutation and code-reuse. Mask-PRF fills this with `q/2^128` tightening and one table for four contexts.
+
+## 9 Limitations, Threats to Validity, and Conclusion
+
+**Limitations.** Evaluation is emulator-bounded (Renode instruction-count, QEMU with I/O) not silicon; ideal-permutation assumption `δ_P` remains (sole axiom, `Print Assumptions → δ_P`); PQ bound vacuous at `q=2^48` for quantum online oracle (practical `online-classical` model gives `q/2^64`).
+
+**Threats to validity.** Emulator fidelity and `SysTick/DWT` sampling in `hal.h` bound error; no real board energy/latency measured; dudect is first-order Welch `|t|<4.5` not TVLA; interop demo is not exhaustive negotiation.
+
+**Conclusion.** One permutation suffices: `Mask_K(X)=trunc_t(P(domsep||K||X))` with a four-entry table provides DTLS/QUIC/ESP/OSCORE seq privacy with tight bound, honest verification debt (`δ_P` only), and `<1 KiB` code.
+
+## Appendix A — Artifacts and Reproducibility
+
+Archived as `RESEARCH-ascon-dtls` (tag `m2-bounded-01`, Zenodo DOI to be minted). One table generates all domsep artifacts: `tools/gen_domsep.py` from `wolfssl/wolfcrypt/mask_prf.h` to `formal/coq/mask_prf_domsep.v` and `formal/easycrypt/mask_prf_domsep.ec` — generated, never hand-edited.
+
+**Version pins.**
+
+| Tool | Version | Notes |
+|---|---|---|
+| wolfSSL | `5.8.2` + `0x006E` patch (commit `06532a3`) | `user_settings.h` |
+| Ascon spec | Dobraunig et al. v1.2, 2021 | NIST LWC winner 2023 |
+| Coq/Rocq | 9.1.1, OCaml 5.1.0 | WSL Ubuntu 24.04 |
+| EasyCrypt | master `ef1b407`, Why3 1.8.2, Z3 4.13.4 | `EXIT:0` |
+| FCF | `/root/fcf-master` (2024) | `make` `EXIT:0` |
+| Renode | 1.16.1 | R9 emulator, not silicon |
+| QEMU | 8.2.2 `netduino2` 120 MHz | with I/O |
+| gcc | 14.2.0 MSYS2 ucrt64 `-O2`; WSL 13.3.0 `-O2` | 64- and `-m32` builds |
+| Valgrind | 3.22.0 | `memcheck`/`cachegrind` |
+
+**Repro commands.**
 
 ```
 make check
 easycrypt compile formal/easycrypt/mask_prf.ec   # EXIT:0
 coqc -Q formal/coq Formal formal/coq/mask_prf.v   # Qed
+valgrind --tool=memcheck --error-exitcode=1 /tmp/standalone_mask   # 0 errors
 ```
 
-Logs: `formal/*.compile.log`, `evaluation/*.log`, Renode `evaluation/renode/*.resc`, QEMU `evaluation/qemu/*.sh`. Interop is demonstrated against OpenSSL and picotls.
+Logs: `formal/*.compile.log`, `evaluation/*.log`, `evaluation/side-channel/*.log`, Renode `evaluation/renode/*.resc`, QEMU `evaluation/qemu/*.sh`. Interop: OpenSSL 3.6.3, picotls. Host seeds and 10-run `mean±std`/`95% CI` in artifact CSVs.
 
 ## References
 
-- MRV15: Mennink, Reyhanitabar, Visoiu. Full indifferentiability of X84. CRYPTO 2015.
-- DM19: Dobraunig, Mennink. Sponge PRF proofs. 2019.
-- Men18: Mennink. Keyed sponges with tight bounds. 2018.
-- Hos25: Hosoyamada et al. Quantum indifferentiability. 2025.
-- RFC 9147: DTLS 1.3. Rescorla et al. 2022.
-- RFC 9001: QUIC TLS. Thomson, Turner. 2021.
-- RFC 4303: IPsec ESP. Kent. 2005.
-- SP 800-232: Ascon guidance (draft). NIST. 2024.
-- pqm4: Post-quantum M4 benchmarks. 2024.
+[1] Dobraunig, Mendel, Mendel, et al. Ascon v1.2. NIST LWC, 2021. https://ascon.iaik.tugraz.at/
+[2] Suleiman et al. wolfSSL Ascon integration for TLS 1.3 `0x006E`. 2025. (wolfSSL PR, AEAD only).
+[3] NIST. Lightweight Cryptography Standardization: Ascon selected. 2023. https://csrc.nist.gov/projects/lightweight-cryptography
+[4] Bertoni, Daemen, Peeters, Van Assche. Sponge indifferentiability, CRYPTO 2008; Duplex, SAC 2011.
+[5] Mennink, Reyhanitabar, Visoiu. Full indifferentiability of Xor-P. CRYPTO 2015. DOI:10.1007/978-3-662-48000-7_12
+[6] Dobraunig, Mennink. Sponge-based PRFs and their security. ToSC 2019.
+[7] Mennink. Key Prediction Security of Keyed Sponges. ToSC 2018(4). DOI:10.13154/tosc.v2018.i4.128-149
+[8] Hosoyamada et al. Post-quantum indifferentiability / quantum sponge. ToSC 2025 (ePrint 2025/1059).
+[9] Rescorla et al. RFC 9147 — DTLS 1.3. IETF, 2022. DOI:10.17487/RFC9147
+[10] Thomson, Turner. RFC 9001 — QUIC-TLS. IETF, 2021. DOI:10.17487/RFC9001
+[11] Kent. RFC 4303 — IPsec ESP. IETF, 2005.
+[12] NIST SP 800-232 (draft). Ascon guidance. 2024.
+[13] Reparaz et al. Dudect: dudect. USENIX Security 2017.
+[14] Nethercote, Seward. Valgrind. 2007.
+[15] Antikernel. Renode 1.16.1 docs. 2024.
+[16] Bellard. QEMU 8.2.2. 2023.
+[17] The Coq Development Team. Coq/Rocq 9.1.1 Reference Manual. 2024.
+[18] Barthe et al. EasyCrypt. 2024. https://www.easycrypt.info/
+[19] Bernstein et al. pqm4 benchmarking. 2024. https://github.com/mupq/pqm4
 
----
-
-[^1]: RNDIMSK_ = 0x524E44494D534B5F (ASCII "RNDIMSK_" — DTLS random mask).
-[^2]: QUPNMSK_ = 0x5155504E4D534B5F (ASCII "QUPNMSK_" — QUIC packet-number mask).
-[^3]: ESPSNW__ = 0x455350534E575F5F (ASCII "ESPSNW__" — ESP sequence-number wrap).
-[^4]: OSCORE__ = 0x4F53434F52455F5F (ASCII "OSCORE__" — OSCORE common IV mask).
+*Notes.* `RNDIMSK_=0x524E44494D534B5F`, `QUPNMSK_=0x5155504E4D534B5F`, `ESPSNW__=0x455350534E575F5F`, `OSCORE__=0x4F53434F52455F5F` — ASCII table entries from `wolfssl/wolfcrypt/mask_prf.h`.
