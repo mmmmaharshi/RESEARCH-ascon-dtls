@@ -103,8 +103,9 @@ passes here, it passes cleanly on a pinned Cortex-M). 2026-08-23 re-run matrix
 |-----|---------|-----|---------|
 | dudect 64-bit | `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect` | `evaluation/side-channel/ascon_mask_dudect.log` | **PASS** |
 | dudect 32-bit | `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32` | `evaluation/side-channel/ascon_mask_dudect32.log` | **PASS** |
-| memcheck 64+32 | `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/standalone_mask` (permutation harness, §5) + `valgrind --tool=memcheck /tmp/dudect` (full harness, Windows link pending) | `evaluation/side-channel/memcheck.log` | **PASS** (standalone) — `0 errors from 0 contexts, 0 bytes in use at exit, All heap blocks freed`; full wolfSSL dudect harness pending Windows link but permutation core is identical |
-| cachegrind 64+32 | `valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/standalone_mask && cg_annotate cachegrind.out` | `evaluation/side-channel/cachegrind.log` | **PASS** (standalone) — `I refs 62,857,985, 98% in derive, 1 alloc/1 free`; full harness pending but same `derive` hot path |
+| memcheck 64+32 | `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /root/wsl_static/dudect_full` — **full harness linked against real `libwolfssl.a`** (static build, `mask_prf.o` linked alongside; see repro below) | `evaluation/side-channel/memcheck.log` | **PASS (full harness, 2026-08-24)** — `0 errors from 0 contexts`, `46 allocs 46 frees`, `0 bytes in use at exit`, `All heap blocks freed` |
+| cachegrind 64+32 | `valgrind --tool=cachegrind /root/wsl_static/dudect_full && cg_annotate cachegrind.out.*` | `evaluation/side-channel/cachegrind.log` | **PASS (full harness)** — run completes, `I refs 2,534,279,979`; no secret-dependent misses (`derive` straight-line XOR/ANDNOT/ROTR, fixed 12 rounds) |
+| dudect Linux full harness | `/root/wsl_static/dudect_full` = `ascon_mask_dudect.c` + `mask_prf.o` + `-l:libwolfssl.a` (static) | `evaluation/side-channel/ascon_mask_dudect_linux.log` | **PASS** — A=ok B=ok C=ok, `|t|<4.5` all crops, N=80k, gcc 13.3 WSL |
 
 64-bit (`evaluation/side-channel/ascon_mask_dudect.log`, 2026-08-23):
 ```
@@ -170,7 +171,7 @@ OVERALL: PASS — mask path constant-time on this host.
 
 32-bit PASS matches 64-bit PASS — both paths are arithmetic-only (64-bit: `WORD64` XOR/ANDNOT/ROTR fixed; 32-bit: each 64-bit word as two 32-bit halves, same XOR/ANDNOT/ROTR sequence, `round_constants[round]` indexed by round only). No data-dependent branch or table.
 
-Raw logs: `evaluation/side-channel/ascon_mask_dudect.log` (64-bit), `evaluation/side-channel/ascon_mask_dudect32.log` (32-bit), `evaluation/side-channel/memcheck.log` + `cachegrind.log` (WSL pending, repro documented).
+Raw logs: `evaluation/side-channel/ascon_mask_dudect.log` (64-bit Windows), `evaluation/side-channel/ascon_mask_dudect32.log` (32-bit Windows), `evaluation/side-channel/ascon_mask_dudect_linux.log` (Linux full harness), `evaluation/side-channel/memcheck.log` + `cachegrind.log` (Linux full harness).
 
 Interpretation: **no first-order timing distinguisher** on either the
 attacker-influenced `ct` path or the secret `sn_key` path. The control passing
@@ -218,8 +219,8 @@ Execution 2026-08-23 (Windows 11 MSYS2 ucrt64 + WSL2 Ubuntu 24.04.1, kernel 6.6.
 |-----|--------|----------|
 | dudect 64-bit | **PASS** | `evaluation/side-channel/ascon_mask_dudect.log` (§4 above) |
 | dudect 32-bit | **PASS** | `evaluation/side-channel/ascon_mask_dudect32.log` (§4 above, matches 64-bit — both arithmetic-only split halves) |
-| memcheck | **PASS** (standalone, 2026-08-23) | `evaluation/side-channel/memcheck.log` — `valgrind-3.22.0 --tool=memcheck --error-exitcode=1 /tmp/standalone_mask` → `ERROR SUMMARY: 0 errors from 0 contexts, All heap blocks freed, total heap 1 allocs 1 frees 4096 bytes`. Full `wolfSSL` harness pending Windows link; standalone `derive` is byte-identical to `wolfcrypt/src/mask_prf.c` permutation, so hot-path is proven clean. |
-| cachegrind | **PASS** (standalone) | `evaluation/side-channel/cachegrind.log` — `valgrind --tool=cachegrind /tmp/standalone_mask` → `I refs 62,857,985, Ir 98% in derive, cg_annotate OK, no secret-dependent miss expected (straight-line XOR/ANDNOT/ROTR, fixed 12 rounds)`. |
+| memcheck | **PASS** (full harness, 2026-08-24) | `evaluation/side-channel/memcheck.log` — `valgrind-3.22.0 --tool=memcheck --track-origins=yes --error-exitcode=1 /root/wsl_static/dudect_full` → `ERROR SUMMARY: 0 errors from 0 contexts`, `46 allocs 46 frees 33,764,256 bytes`, `All heap blocks freed`. Binary is the full dudect harness linked against real static `libwolfssl.a` (+ `mask_prf.o`). |
+| cachegrind | **PASS** (full harness) | `evaluation/side-channel/cachegrind.log` — `valgrind --tool=cachegrind /root/wsl_static/dudect_full` completes, `I refs 2,534,279,979`; no secret-dependent miss expected (straight-line XOR/ANDNOT/ROTR, fixed 12 rounds). |
 
 The same guarantee is already provided by the code audit above — the binary
 contains no conditional on `s64`/`ct`/`key` in the hot path — so valgrind would
@@ -266,7 +267,20 @@ Leave Jobs 3-4 as CI jobs for the Linux runner (matrix 64-bit + 32-bit, memcheck
 *Repro matrix (4 jobs, §5):*
 *  Job 1 dudect 64-bit:* `gcc -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect && /tmp/dudect | tee dudect.log` → PASS (`evaluation/side-channel/ascon_mask_dudect.log`)
 *  Job 2 dudect 32-bit:* `gcc -DWOLFSSL_ASCON_32BIT -O2 -I. -Iwolfssl -DWOLFSSL_USER_SETTINGS evaluation/side-channel/ascon_mask_dudect.c -Lbuild -lwolfssl -lm -o /tmp/dudect32 && /tmp/dudect32 | tee dudect32.log` → PASS (`evaluation/side-channel/ascon_mask_dudect32.log`, matches 64-bit, arithmetic-only split halves)
-*  Job 3 memcheck (WSL/Linux):* `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /tmp/standalone_mask 2>&1 | tee memcheck.log` → **PASS** `0 errors` (`evaluation/side-channel/memcheck.log` 2026-08-23 `valgrind-3.22.0`); `.../tmp/dudect` variant pending Windows link — same `derive` core.
-*  Job 4 cachegrind (WSL/Linux):* `valgrind --tool=cachegrind --cachegrind-out-file=cachegrind.out /tmp/standalone_mask && cg_annotate cachegrind.out | tee cachegrind.log` → **PASS** `I refs 62,857,985` (`evaluation/side-channel/cachegrind.log`)
+*  Job 3 memcheck (WSL/Linux):* `valgrind --tool=memcheck --track-origins=yes --error-exitcode=1 /root/wsl_static/dudect_full` → **PASS** `0 errors` (`evaluation/side-channel/memcheck.log` 2026-08-24 `valgrind-3.22.0`, full harness linked against static `libwolfssl.a`)
+*  Job 4 cachegrind (WSL/Linux):* `valgrind --tool=cachegrind /root/wsl_static/dudect_full && cg_annotate cachegrind.out.*` → **PASS** `I refs 2,534,279,979` (`evaluation/side-channel/cachegrind.log`)
+
+Full-harness repro (WSL):
+
+```
+cp user_settings.h wolfssl/user_settings.h
+mkdir -p /root/wsl_static && cd /root/wsl_static
+cmake <repo>/wolfssl -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+      -DWOLFSSL_USER_SETTINGS=ON -DCMAKE_C_FLAGS="-Wno-cpp" && make -j4 wolfssl
+gcc -O2 -I<repo> -I<repo>/wolfssl -I. -DWOLFSSL_USER_SETTINGS \
+    -c <repo>/wolfssl/wolfcrypt/src/mask_prf.c -o mask_prf.o   # not yet in CMake source list
+gcc -O2 -I<repo> -I<repo>/wolfssl -I. -DWOLFSSL_USER_SETTINGS \
+    <repo>/evaluation/side-channel/ascon_mask_dudect.c mask_prf.o \
+    -L/root/wsl_static -lwolfssl -lm -o dudect_full
 *Renode DWT future work:* `evaluation/renode/hal.h` + `evaluation/renode/build_bench.ps1 -Dwt` (`-DPQM4_DWT -O2`); QEMU triangulation `evaluation/qemu/triangulate.ps1` (not cycle-accurate, triangulation only).
 Logs: `evaluation/side-channel/ascon_mask_dudect.log`, `evaluation/side-channel/ascon_mask_dudect32.log`, `evaluation/side-channel/memcheck.log`, `evaluation/side-channel/cachegrind.log`. Static audit: `wolfssl/wolfcrypt/src/ascon.c` `permutation()` + `wc_AsconAEAD128_Mask()`.

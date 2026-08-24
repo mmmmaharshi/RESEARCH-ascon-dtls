@@ -1,10 +1,7 @@
-== valgrind --tool=cachegrind /tmp/standalone_mask (2026-08-23) ==
-==397== Cachegrind, a high-precision tracing profiler
-==397== Command: /tmp/standalone_mask
-==397== 
-out 55a4 adv test
-adv 1.92593e-34
-80k done
-==397== 
-==397== I refs:        62,857,985
-==397== Summary Ir 62,857,985 (100%) PROGRAM TOTALS, 98% in derive (61,600,770 Ir), 1.8% in main
+==368== Cachegrind, a high-precision tracing profiler
+==368== Copyright (C) 2002-2017, and GNU GPL'd, by Nicholas Nethercote et al.
+==368== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==368== Command: /root/wsl_static/dudect_full
+==368== 
+==368== 
+==368== I refs:        2,534,279,979
