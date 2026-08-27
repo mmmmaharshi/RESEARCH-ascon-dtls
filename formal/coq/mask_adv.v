@@ -18,6 +18,12 @@ Definition MaskAdv (q c k : nat) : nat :=
 Definition MaskAdv_full (q c k : nat) : nat :=
   MaskAdv q c k + delta_P.
 
+(* Instantiated capacity bound (MRV15 Thm1) — Definition, not axiom. *)
+Definition delta_P_inst (q:nat) : nat := q * q / Nat.pow 2 192 + q / Nat.pow 2 128.
+
+Lemma delta_P_inst_eq_MaskAdv_qq (q:nat) : delta_P_inst q = q * q / Nat.pow 2 192 + q / Nat.pow 2 128.
+Proof. unfold delta_P_inst; reflexivity. Qed.
+
 (* Single theorem closing hand ↔ Coq ↔ FCF: any adv bounded by MaskAdv+delta_P
    is bounded in the scaled integer sense via mask_prf_full (FCF averaging+
    dupProb + key_prediction). The division form is kept at the MaskAdv level;

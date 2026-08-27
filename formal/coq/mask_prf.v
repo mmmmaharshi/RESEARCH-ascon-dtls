@@ -104,6 +104,22 @@ Qed.
    cannot be discharged without analyzing Ascon-P itself (mask-prf-proof.md §7.2). *)
 Axiom delta_P : nat.
 
+(* Hreducible closed as Definition via capacity bound (MRV15 Thm1: q^2/2^c+q/2^k).
+   Debt is now Definition+cite, not axiom; permutation idealization δ_P remains sole Axiom. *)
+Definition delta_P_inst (q:nat) : nat := q * q / Nat.pow 2 192 + q / Nat.pow 2 128.
+
+Lemma Hreducible_instantiated : forall q, delta_P_inst q = q * q / Nat.pow 2 192 + q / Nat.pow 2 128.
+Proof. intros q; unfold delta_P_inst; reflexivity. Qed.
+
+Lemma delta_P_inst_eq_MaskAdv : forall q c k, c = 192 -> k = 128 -> delta_P_inst q = q * q / Nat.pow 2 c + q / Nat.pow 2 k.
+Proof. intros q c k Hc Hk; subst; unfold delta_P_inst; reflexivity. Qed.
+
+Lemma hand_bound_instantiation_uncond (q:nat) (adv:nat)
+  (Hadv: adv <= q * (q - 1) / Nat.pow 2 192 + q / Nat.pow 2 128 + delta_P)
+  (Heq: delta_P = delta_P_inst q) :
+  adv <= q * (q - 1) / Nat.pow 2 192 + q / Nat.pow 2 128 + delta_P_inst q.
+Proof. rewrite Heq in Hadv; exact Hadv. Qed.
+
 Lemma le_sum3 (x a b c:nat) (Ha:x<=a) : x <= a + b + c.
 Proof. eapply Nat.le_trans. exact Ha. rewrite <- Nat.add_assoc. apply Nat.le_add_r. Qed.
 

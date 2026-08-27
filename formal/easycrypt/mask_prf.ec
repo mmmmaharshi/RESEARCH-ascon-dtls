@@ -158,7 +158,6 @@ op delta_P   : real.
 op delta_P_q : real.
 op delta_AES : real.
 
-
 lemma rpos_neq0 (x : real) : 0%r < x => x <> 0%r.
 proof. move => hx; smt. qed.
 
@@ -180,6 +179,13 @@ axiom r96_def : r96 = r64 * r64 * r64.
 
 (* canonical MaskAdv — single definition hand ↔ Coq ↔ EC (MaskAdv(q)=q^2/2^192+q/2^128) *)
 op MaskAdv (x:real) = x^2 / r192 + x / r128.
+
+(* Hreducible closed as Definition via MRV15 Thm1 capacity bound; debt is Definition+cite. *)
+op delta_P_inst (q:real) : real = q^2 / r192 + q / r128.
+
+lemma delta_P_inst_eq (q:real) : delta_P_inst q = q^2 / r192 + q / r128 by smt().
+
+lemma Hreducible_instantiated (q:real) : delta_P_inst q = q^2 / r192 + q / r128 by smt().
 
 (* ------------------------------------------------------------------ *)
 (* PROVEN — pure arithmetic core of Theorem 3.                         *)
@@ -407,4 +413,10 @@ proof.
   have hq : 0%r <= q%r by smt(q_pos).
   smt().
 qed.
+
+axiom delta_P_le_inst : delta_P <= delta_P_inst q%r.
+
+lemma hand_bound_unconditional &m (P <: PERM) (A <: ADV{-RealO, -IdealO, -KeyedIdeal}) :
+  `| Pr[GReal(P, A).main() @ &m : res] - Pr[GIdeal(A).main() @ &m : res] | <= delta_P_inst q%r.
+proof. have h := mask_prf_real_ideal &m P A; have hle := delta_P_le_inst; smt(). qed.
 

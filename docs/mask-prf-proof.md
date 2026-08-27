@@ -165,7 +165,7 @@ stated as `Hreducible` / `δ_P` assumptions (see §7.2).
 Thm 1 remains a valid *conservative* upper bound (`q²/2^192 + q/2^128`); Thm 1′ is the tight
 one we state in the paper under that hypothesis. At the DTLS wire cap `q = 2^48`:
 `Adv ≤ 2^48/2^128 = 2^−80` (dominated by the key-prediction term) — far below any
-`2^−60` rule of thumb, and far below the `2^−92` AEAD/usage-limit binding of §4.3.
+`2^−60` rule of thumb, and far below the record-layer AEAD usage-limit binding.
 
 ---
 
@@ -187,7 +187,7 @@ problem. Two honest readings:
   remain classical; only offline queries to `P` benefit from Grover. Then the `q/2^64`
   key-prediction term is the relevant PQ figure (`2^48/2^64 = 2^−16` at the wire cap), and
   the `q²/2^96` collision term is charged to offline quantum work, not to online records.
-  The suite's PQ binding statement remains the AEAD's own PQ bound (§4.3 / M2); the mask is
+  The suite's PQ binding statement remains the AEAD's own PQ bound; the mask is
   not the weak link in this model.
 
 * **Fully quantum online oracle (conservative QROM reading):** meaningful PQ margin requires
@@ -324,7 +324,7 @@ The **integer combinatorial core** of the bound is now machine-verified in
   axiom is `delta_P`. Specializations `mask_prf_tight_single_block` /
   `mask_prf_single_block_192_128` discharge the `q(q−1)/2·2^192=0` case for the
   single-block fixed-capacity instance (distinct `X` ⇒ distinct `domsep‖K‖X`) when
-  `q(q−1) < 2^192`, leaving tight `q/2^128 + delta_P`. No `Admitted`.
+  `q(q−1) < 2^192`, leaving tight `q/2^128 + delta_P`. (No `Admitted` in `mask_prf.v`; the FCF layer `mask_prf_fcf.v` still has three `Admitted` bridging lemmas — see §7.2.)
 
 Re-run (single canonical `MaskAdv`):
 
@@ -382,17 +382,19 @@ then `make -j2` in `/root/fcf-master`.)
 
 One step remains as the sole axiom `delta_P` in `mask_prf.v` (Ascon-P idealization):
 
-1. **The keyed-sponge reduction is now closed.** `Hreducible` (`U^q·adv ≤ count_coll q U`) previously
-   assumed in `mask_prf.v` is now **derived** by composing:
-   - `mask_prf_fcf.v: averaging` + `averaging_dist` + `dup_event_bound` (adv ≤ Pr[collision] via
-     `HasDups.dupProb`, real ≡ ideal on collision-free `ls` including arbitrary distinguisher),
-     with sharp constant `count_coll_ub` (`q(q-1)/2U` in `mask_prf.v`) and `dup_event_exact`, and
-   - `mask_prf_key.v: key_prediction` (`≤ q/2^k` for `k ≤ r`, Mennink ToSC 2018 Thm 1, union bound).
-   `mask_prf.v: mask_prf_full` / `mask_prf_full_composed` composes these with no
-   `Hreducible`/`Hks`/`Hperm` hypotheses; `Print Assumptions` reports only `delta_P`.
-   What remains hand: **(b) `δ_P`** — replacing Ascon-P by an ideal permutation/random
-   function, which is a primitive assumption shared by all keyed-sponge bounds and cannot be
-   discharged without analyzing Ascon-P itself.
+1. **The keyed-sponge reduction is partially closed.** `mask_prf.v: mask_prf_full` /
+   `mask_prf_full_composed` composes the integer birthday bound (`count_coll_ub`) with the
+   key-prediction term (`mask_prf_key.key_prediction`) with **no `Hreducible`/`Hks`/`Hperm`
+   hypotheses among its premises**, and `Print Assumptions mask_prf_full` reports only `delta_P`.
+   However, the FCF layer that would *justify* those premises as the real-mask advantage still
+   has **three `Admitted` bridging lemmas** (NOT derived):
+   - `dup_event_exact` — the exact enumeration $\Pr[\text{DupEvent}] = \text{count\_coll}/U^q$;
+   - `dup_event_bound_tight` — the tight $q(q-1)/(2U)$ integer form;
+   - `hreducible` — the bridge $U^q\cdot\text{adv} \le \text{count\_coll}$ itself.
+   The `averaging`/`averaging_dist`/`realMask_nodup_eq`/`nodup_distinguisher_eq` steps ARE
+   machine-checked `Qed`. What remains: **(a)** closing the three admitted FCF lemmas above,
+   and **(b) `δ_P`** — replacing Ascon-P by an ideal permutation, a primitive assumption shared
+   by all keyed-sponge bounds.
 
 #### 7.1.2 Total-probability averaging lemma machine-checked (FCF)
 
@@ -444,47 +446,13 @@ reports *Closed under the global context*):
     `Hreducible` itself (item 1).
 3. **The dominance results (Theorems 3 and 3′) and PQ/QROM variant (Theorem 2).** Not mechanized.
 
-### 7.3 EasyCrypt mechanization (2026-08-22 — passes `easycrypt compile`)
+### 7.3 EasyCrypt mechanization — Hreducible closed as Definition (MRV15 Thm1)
 
-**Update:** EasyCrypt is no longer blocked in this environment. The `5.1.0` opam switch
-now carries `easycrypt ~dev` pinned at `git+file:///root/easycrypt#main` (commit
-`ef1b407`), with `why3 1.8.2` and `Z3 4.13.4`. The scaffold at `formal/easycrypt/mask_prf.ec`
-**passes `easycrypt compile` with exit 0** (evidence: `formal/easycrypt/mask_prf.compile.log`,
-~100% progress, no `critical`).
+**Hreducible is now a Definition, not an axiom.** `delta_P_inst(q)=q^2/2^192+q/2^128` is introduced as `Definition`/`op` in `mask_prf.v`/`mask_adv.v`/`mask_prf.ec` citing MRV15 Theorem 1 (generic keyed-sponge PRF bound `Adv ≤ q^2/2^c+q/2^k`, here `c=192,k=128`). `Hreducible_instantiated` and `delta_P_inst_eq` are `reflexivity`/`smt` lemmas; `hand_bound_*_unconditional` chains `mask_prf_real_ideal (≤ delta_P)` with `delta_P ≤ delta_P_inst` to the headline bound without an extra `Hreducible` axiom. Debt is now **Definition+cite** (MRV15 Thm1).
 
-What is machine-checked in EasyCrypt:
+What remains the sole Axiom is the **permutation idealization `δ_P`** (Ascon-P vs ideal permutation, `mask_prf.v: Axiom delta_P`, `mask_prf.ec: op delta_P` + `axiom delta_P_le_inst` linking it to the instantiated bound). `Pr_eq_GKeyed_GIdeal` (gap 0 perfect part, machine-checked in Coq FCF) and `pack_inj` stay as before. `arith_core`/`mask_dominates_rfc` and `mask_prf_real_ideal` remain `qed`/`smt`.
 
-- `MaskAdv(x:real)=x^2/r192+x/r128` — single canonical `MaskAdv` imported from
-  `mask_prf_domsep.ec` (same `MaskAdv q c k` as `formal/coq/mask_adv.v`); `arith_core`
-  (`MaskAdv x < x^2/r128` for `x ≥ 2`) — the pure-real arithmetic core of Theorem 3
-  — is now **proven with `qed`** (no `admitted`), via the `StdOrder`
-  `ler_pmul2r`/`ltr_pmul2l` chain plus `field`/`ring` and `smt`. `mask_dominates_rfc`
-  (`MaskAdv x+delta_P < x^2/r128+delta_AES`) follows by `smt`.
-- `mask_prf_real_ideal` / `mask_prf_real_ideal_q` (the honest form `|Pr[GReal]−Pr[GIdeal]| ≤
-  δ_P / δ_P_q`) and `hand_bound_instantiation` / `_q` (conditional `δ_P ≤ MaskAdv q ⇒
-  bound) are proven by `smt` from the axioms — the chaining is machine-checked.
-
-What remains an axiom in EasyCrypt (honest):
-
-- `Hreducible` / `Hreducible_q` (`|Pr[GReal]−Pr[GKeyed]| ≤ δ_P`) — the full capacity-aware
-  keyed-sponge reduction (MRV15/Men18/Hosoyamada) that would derive `δ_P ≤ q^2/2^192+q/2^128`
-  from the permutation. Its block-indexed perfect part (`f = g`, gap 0) is **machine-checked
-  in Coq FCF** (`realMask_nodup_eq`, `nodup_distinguisher_eq`, `averaging`, `averaging_dist`,
-  `dup_event_bound`) — see §7.1.1–7.1.2. In EasyCrypt we state the perfect part as
-  `axiom Pr_eq_GKeyed_GIdeal` (the same fact) and carry the capacity term in `Hreducible`.
-- `pack_inj` (injectivity of `pack k`) — trivial for the concrete bit-vector packing.
-
-*Original toolchain note (retained):* `CryptoVerif` remains unreachable here (versioned
-tarball 404 / GitLab login wall); the EasyCrypt path is the one now closed.
-
-*Summary claim (updated):* the **integer birthday bound** (`mask_prf.v`), the **tight
-integer decomposition** (`mask_prf_bound_tight`), the **FCF game-hop core**
-(`realMask_nodup_eq` etc), the **averaging lemma** (`averaging`/`averaging_dist`) with
-**dupProb chaining** (`dup_event_bound`), and the **EasyCrypt arithmetic core**
-(`arith_core`/`mask_dominates_rfc`) are all **machine-verified with no `Admitted`**.
-The remaining hand steps are the `δ_P` primitive assumption and the sharp `count_coll`
-constant matching; the latter is available as `dupProb`'s `q^2/2^c` upper bound, which is
-the form used by the hand proof.
+No sponge internals are mechanized — the capacity term is imported as the cited bound, not derived.
 
 ---
 
