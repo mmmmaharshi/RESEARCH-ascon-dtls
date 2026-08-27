@@ -28,10 +28,23 @@
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/ascon.h>
 
+/* unified HAL — evaluation/common/hal.h provides hal_host_now/lfence; fallback retained for deletion test */
+#if __has_include("../common/hal.h")
+#include "../common/hal.h"
+#elif __has_include("evaluation/common/hal.h")
+#include "evaluation/common/hal.h"
+#elif __has_include("common/hal.h")
+#include "common/hal.h"
+#endif
+#ifdef HAL_HDR_ADDR
+static inline uint64_t rdtsc(void){ return hal_host_now(); }
+static inline void lfence(void){ hal_host_lfence(); }
+#else
 #if defined(_MSC_VER)
 #include <intrin.h>
 #pragma intrinsic(__rdtsc)
 static inline uint64_t rdtsc(void){ return __rdtsc(); }
+static inline void lfence(void){}
 #else
 static inline uint64_t rdtsc(void){
     unsigned lo, hi;
@@ -39,6 +52,7 @@ static inline uint64_t rdtsc(void){
     return ((uint64_t)hi<<32)|lo;
 }
 static inline void lfence(void){ __asm__ __volatile__("lfence" ::: "memory"); }
+#endif
 #endif
 
 static uint64_t xs = 0x9e3779b97f4a7c15ULL ^ 0x12345ULL;
@@ -210,3 +224,4 @@ int main(void){
     else printf("OVERALL: FAIL — investigate.\n");
     return (leakA||leakB) ? 2 : 0;
 }
+

@@ -6,8 +6,8 @@
 
 #ifdef PQM4_DWT
 #include "hal.h"
-#define REC_START()        do { rec_t0 = hal_cc(); } while (0)
-#define REC_END_ADD(total) do { (total) += (hal_cc() - rec_t0); } while (0)
+#define REC_START()        do { rec_t0 = hal_now(); } while (0)
+#define REC_END_ADD(total) do { (total) += hal_elapsed(rec_t0, hal_now()); } while (0)
 #else
 /* Single-iteration SysTick timer. The Cortex-M SysTick is a 24-bit DOWN
  * counter clocked at the CPU frequency (32 MHz here). For any region shorter
@@ -15,10 +15,8 @@
  *     (start - end) & 0x00FFFFFF
  * with no wrap accounting. We therefore time EACH record iteration
  * individually and accumulate: a single iteration is far below the period, so
- * there is no wrap ambiguity. (An earlier whole-loop timer could mis-count a
- * single SysTick reload on a sub-period region, producing a spurious M3
- * record-mask figure.) The throughput benchmark keeps its own bench_current_time().
- * Fallback for M0+ (no DWT). Under PQM4_DWT use hal_cc() above.
+ * there is no wrap ambiguity. Mirrors hal_systick path in evaluation/common/hal.h.
+ * Fallback for M0+ (no DWT). Retained for deletion test (build without hal.h).
  */
 #define REC_SYST_CVR       (*(volatile uint32_t*)0xE000E018u)
 #define REC_START()        do { rec_t0 = REC_SYST_CVR; } while (0)

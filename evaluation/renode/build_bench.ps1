@@ -1,19 +1,19 @@
 param(
     [string]$Core = "m0plus",  # m0plus | m0 | m3 | m4 | m33
     [switch]$SizeOpt,          # when set, build with 64-bit-word Ascon (WOLFSSL_ASCON_32BIT undefined)
-    [switch]$Dwt               # when set, use pqm4 DWT CYCCNT (-DPQM4_DWT, -O2)
+    [switch]$Dwt               # when set, use pqm4 DWT CYCCNT (-DPQM4_DWT, -O2) via unified HAL evaluation/common/hal.h
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $gcc = "arm-none-eabi-gcc"
 $mcpuMap = @{ "m0plus"="cortex-m0plus"; "m0"="cortex-m0"; "m3"="cortex-m3"; "m4"="cortex-m4"; "m33"="cortex-m33" }
-if (-not $mcpuMap.ContainsKey($Core)) { Write-Error "Unknown Core '$Core' (expected m0plus|m0|m3|m4|m33)"; exit 1 }
+if (-not $mcpuMap.ContainsKey($Core)) { Write-Error "Unknown Core ''$Core'' (expected m0plus|m0|m3|m4|m33)"; exit 1 }
 $mcpu = $mcpuMap[$Core]
 $asconDef = if ($SizeOpt) { "-UWOLFSSL_ASCON_32BIT" } else { "-DWOLFSSL_ASCON_32BIT" }
 $suffix = if ($SizeOpt) { "-sizeopt" } else { "" }
 if ($Dwt) { $suffix += "-dwt" }
 $dwtDef = if ($Dwt) { "-DPQM4_DWT" } else { $null }
-$opt = if ($Dwt) { "-O2" } else { "-Os" }
+$opt = if ($Dwt) { "-O2" } else { "-Os" }  # unified HAL: DWT=-O2, SysTick fallback=-Os
 
 $defs = @(
     "-DWOLFSSL_USER_SETTINGS",
@@ -38,6 +38,7 @@ $incs = @(
     "-I$root\wolfssl",
     "-I$root\wolfssl\wolfssl",
     "-I$root\wolfssl\wolfcrypt\benchmark",
+    "-I$root\evaluation",
     "-I$PSScriptRoot"
 )
 $srcs = @(

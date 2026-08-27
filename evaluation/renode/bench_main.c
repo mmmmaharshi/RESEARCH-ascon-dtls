@@ -2,11 +2,12 @@
  * - current_time: SysTick (32 MHz, 24-bit, COUNTFLAG wrap tracking)
  * - printf (XPRINTF): appends to an SRAM buffer read back by the host
  *   after the emulation is paused.
- * Results: header at 0x2000D000 (magic/out_addr/out_len/done),
- *          text at 0x2000E000. Region sits above __stack_top (0x2000C000),
- *          so neither the heap (capped at 0x20008000) nor the stack can
- *          clobber it. SRAM 64K+ (QEMU netduino2 64K, Renode 256K) — low
- *          addresses fit both; Renode repl is 256K, QEMU netduino2 is 64K. */
+ * Results: header at HAL_HDR_ADDR (magic/out_addr/out_len/done),
+ *          text at HAL_OUT_ADDR. Region sits above __stack_top
+ *          (HAL_STACK_TOP), heap capped at HAL_HEAP_LIMIT so neither
+ *          heap nor stack clobbers it. SRAM 64K+ (QEMU netduino2 64K,
+ *          Renode 256K) — low addresses fit both. Unified HAL:
+ *          evaluation/common/hal.h — DWT vs SysTick vs rdtsc. */
 #include <stdint.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -24,10 +25,20 @@ void record_bench(void);
 #define CTRL_ENABLE_CLK (0x5u) /* ENABLE | CLKSOURCE */
 #endif
 
-#define HDR_ADDR  0x2000D000u
-#define OUT_ADDR  0x2000E000u
-#define OUT_SIZE  8192u
-#define HDR_MAGIC 0x4D303032u /* "M002" */
+/* result buffer — canonical in evaluation/common/hal.h; aliases keep local names */
+#ifndef HAL_HDR_ADDR
+#define HAL_HDR_ADDR  0x2000D000u
+#define HAL_OUT_ADDR  0x2000E000u
+#define HAL_OUT_SIZE  8192u
+#define HAL_HDR_MAGIC 0x4D303032u
+#define HAL_HEAP_LIMIT 0x20008000u
+#define HAL_STACK_TOP  0x2000C000u
+#define HAL_CPU_HZ    32000000u
+#endif
+#define HDR_ADDR  HAL_HDR_ADDR
+#define OUT_ADDR  HAL_OUT_ADDR
+#define OUT_SIZE  HAL_OUT_SIZE
+#define HDR_MAGIC HAL_HDR_MAGIC
 
 static volatile uint32_t* hdr = (volatile uint32_t*)HDR_ADDR;
 static volatile char*      out = (volatile char*)OUT_ADDR;
@@ -43,7 +54,9 @@ static uint32_t dwt_start;
  * symbol from bench.ld (end = __heap_start). Capped below the reserved
  * output region / stack so it can't overwrite the result buffer. */
 extern char end;
-#define HEAP_LIMIT 0x20008000u
+#ifndef HAL_HEAP_LIMIT
+#define HAL_HEAP_LIMIT 0x20008000u
+#endif
 void* _sbrk(ptrdiff_t incr)
 {
     static char* heap = NULL;
@@ -52,7 +65,7 @@ void* _sbrk(ptrdiff_t incr)
     }
     char* prev = heap;
     char* next = heap + incr;
-    if (next > (char*)HEAP_LIMIT) {
+    if (next > (char*)HAL_HEAP_LIMIT) {
         return (void*)-1; /* OOM */
     }
     heap = next;
@@ -64,11 +77,11 @@ double bench_current_time(int reset)
 {
 #ifdef PQM4_DWT
     if (reset) {
-        hal_dwt_enable();
-        dwt_start = hal_cc();
+        hal_enable();
+        dwt_start = hal_now();
         return 0.0;
     }
-    return (double)(hal_cc() - dwt_start) / 32000000.0;
+    return (double)hal_elapsed(dwt_start, hal_now()) / 32000000.0;
 #else
     if (reset) {
         s_wraps = 0;
@@ -112,7 +125,7 @@ int main(void)
     out[0] = 0;
 
 #ifdef PQM4_DWT
-    hal_dwt_enable();
+    hal_enable();
 #else
     SYST_RVR = 0x00FFFFFFu;
     SYST_CVR = 0;

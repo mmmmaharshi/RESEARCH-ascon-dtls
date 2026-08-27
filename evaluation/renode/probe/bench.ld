@@ -1,4 +1,5 @@
 ENTRY(reset_handler)
+/* Unified HAL: heap/stack addrs canonical in evaluation/common/hal.h (HAL_HEAP_LIMIT/HAL_STACK_TOP) */
 
 MEMORY
 {
@@ -41,8 +42,8 @@ SECTIONS
 
     . = ALIGN(4);
     __heap_start = .;
-    __heap_end = 0x20008000;
+    __heap_end = 0x20008000; /* HAL_HEAP_LIMIT */
     end = __heap_start;
     __end__ = __heap_start;
-    __stack_top = 0x2000C000;
+    __stack_top = 0x2000C000; /* HAL_STACK_TOP */
 }

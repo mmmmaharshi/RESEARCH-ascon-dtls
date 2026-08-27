@@ -4,9 +4,13 @@ param(
     [string]$LogFile = "$env:TEMP\ascon-dtls-work\renode_bench.log",
     [int]$TimeoutSeconds = 120
 )
+# Unified HAL: result buffer addrs canonical in evaluation/common/hal.h (HAL_HDR_ADDR/HAL_OUT_ADDR).
 $ErrorActionPreference = "Stop"
 $renode = "$env:LOCALAPPDATA\RenodePortable\renode_1.16.1-dotnet_portable\renode.exe"
 $port = 4567
+$HAL_HDR_ADDR = 0x2000D000
+$HAL_OUT_ADDR = 0x2000E000
+$HAL_HDR_MAGIC = 0x4D303032
 
 $logDir = Split-Path -Parent $LogFile
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -46,7 +50,7 @@ try {
         if ($m.Count -gt 0) { [Convert]::ToInt64($m[$m.Count - 1].Groups[1].Value, 16) } else { -1 }
     }
 
-    Send-Cmd 'mach create "bench"'
+    Send-Cmd ''mach create "bench"''
     Rcv | Out-Null
     Send-Cmd "machine LoadPlatformDescription @$Platform"
     Rcv | Out-Null
@@ -60,7 +64,7 @@ try {
     while ($done -eq 0 -and $sw.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
         Start-Sleep -Seconds 5
         Send-Cmd "pause"
-        $done = Read-HexWord "0x2000D00C"
+        $done = Read-HexWord ("0x{0:X}" -f ($HAL_HDR_ADDR + 0xC))
         if ($done -eq 0) { Send-Cmd "start" }
     }
     $sw.Stop()
@@ -69,12 +73,12 @@ try {
         Write-Output "WARN: done=0 after ${TimeoutSeconds}s; dumping partial SRAM output (best-effort)"
     }
 
-    $magic  = Read-HexWord "0x2000D000"
-    $outLen = Read-HexWord "0x2000D008"
-    Write-Output "magic=0x$($magic.ToString('X8')) outLen=$outLen elapsed=$($sw.Elapsed.TotalSeconds)s"
+    $magic  = Read-HexWord ("0x{0:X}" -f $HAL_HDR_ADDR)
+    $outLen = Read-HexWord ("0x{0:X}" -f ($HAL_HDR_ADDR + 8))
+    Write-Output "magic=0x$($magic.ToString(''X8'')) outLen=$outLen elapsed=$($sw.Elapsed.TotalSeconds)s"
 
     $dumpLen = if ($outLen -gt 0) { $outLen } else { 4096 }
-    Send-Cmd "sysbus ReadBytes 0x2000E000 $dumpLen"
+    Send-Cmd "sysbus ReadBytes 0x$($HAL_OUT_ADDR.ToString(''X'')) $dumpLen"
     $dump = Rcv
     $bytes = [regex]::Matches($dump, "0x([0-9a-fA-F]{2})") | ForEach-Object { [Convert]::ToByte($_.Groups[1].Value, 16) }
     $text = [System.Text.Encoding]::ASCII.GetString([byte[]]$bytes)

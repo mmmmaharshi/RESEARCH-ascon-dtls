@@ -11,6 +11,8 @@ param(
 # WSL/Linux compatible: on Windows tries `wsl -- qemu-*`, on Linux runs natively.
 # System-mode: qemu-system-arm -M mps2-an385 -nographic -kernel bench-m*.elf -d instr -D qemu.log -semihosting
 # User-mode : qemu-arm -d instr -D qemu.log ./bench.elf  (requires ARM user ELF, not Cortex-M semihosting)
+# Unified HAL: ELF built via evaluation/common/hal.h (HAL_HDR_ADDR 0x2000D000, HAL_OUT_ADDR 0x2000E000) — same binary as Renode.
+# Result buffer addrs canonical in common/hal.h; run_driver.ps1 reads same addrs.
 $ErrorActionPreference = "Stop"
 
 function Resolve-Qemu([string]$name, [string]$override){
@@ -35,13 +37,13 @@ if(!(Test-Path $Elf)){
 if($Mode -eq "system"){
     $qemu = Resolve-Qemu "qemu-system-arm" $QemuBin
     $args = @("-M","mps2-an385","-nographic","-kernel",$Elf,"-d","instr","-D",$QemuLog,"-semihosting")
-    Write-Output "Running: $qemu $($args -join ' ')"
+    Write-Output "Running: $qemu $($args -join '' '')"
     Write-Output "Caveat: not cycle-accurate, triangulation only — instr count, not timing."
     if($qemu -like "wsl --*"){ & wsl -- qemu-system-arm @args 2>&1 | Out-Null } else { & qemu-system-arm @args 2>&1 | Out-Null }
 } else {
     $qemu = Resolve-Qemu "qemu-arm" $QemuBin
     $args = @("-d","instr","-D",$QemuLog,$Elf)
-    Write-Output "Running: $qemu $($args -join ' ')"
+    Write-Output "Running: $qemu $($args -join '' '')"
     Write-Output "Caveat: not cycle-accurate, triangulation only — user-mode instr count."
     if($qemu -like "wsl --*"){ & wsl -- qemu-arm @args 2>&1 | Out-Null } else { & qemu-arm @args 2>&1 | Out-Null }
 }
@@ -66,4 +68,4 @@ Write-Output ("instr/record est (32 B rec): {0:F1} instr/rec if one record per r
 #   $chacha = (Get-Content qemu-chacha.log | Measure).Lines
 #   "Ascon/ChaCha instr ratio: {0:F2}x" -f ($ascon/$chacha)
 Write-Output "Done. Compare Ascon vs ChaCha/AES-GCM: repeat with each ELF and ratio instr counts."
-Write-Output "Note: not cycle-accurate, triangulation only — use Renode DWT (hal.h PQM4_DWT) for cycle estimates."
+Write-Output "Note: not cycle-accurate, triangulation only — use Renode DWT (common/hal.h PQM4_DWT) for cycle estimates."
