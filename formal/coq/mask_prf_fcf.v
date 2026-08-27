@@ -638,16 +638,8 @@ Section MaskPRF.
     intros q.
     eapply leRat_trans with (r2 := (count_coll q U / Nat.pow U q)%rat).
     - apply eqRat_impl_leRat. apply dup_event_exact.
-    - (* count_coll / U^q <= q(q-1)U^{q-1} / 2U^q  iff 2*count_coll <= q(q-1)U^{q-1} *)
-      apply leRat_trans with (r2 := (count_coll q U / Nat.pow U q)%rat).
-      + apply leRat_refl.
-      + unfold leRat, bleRat.
-        destruct (count_coll q U / Nat.pow U q)%rat as [n1 d1] eqn:H1.
-        destruct (q * (q - 1) * Nat.pow U (q - 1) / (2 * Nat.pow U q))%rat as [n2 d2] eqn:H2.
-        simpl in H1, H2.
-        (* Reduce to Nat inequality 2*count_coll*U^q <= q(q-1)U^{q-1}*U^q  <-> 2*count_coll <= q(q-1)U^{q-1} *)
-        (* Use count_coll_ub *)
-        admit.
+    - apply eqRat_impl_leRat.
+      admit.
   Admitted.
 
   (* Hreducible in Rat form: U^q * adv <= count_coll q U.
