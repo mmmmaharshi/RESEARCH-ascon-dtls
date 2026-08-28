@@ -25,17 +25,16 @@
     #error "Mask-PRF requires 64-bit word"
 #endif
 
-/* Local permutation — reuse of ascon.c logic (copied, not extern, to keep module colocated).
- * ponytail: duplicate 12-round constants; upgrade to shared header if permutation is refactored. */
-static const byte s_round_constants[12] = {
-    0xf0, 0xe1, 0xd2, 0xc3, 0xb4, 0xa5, 0x96, 0x87, 0x78, 0x69, 0x5a, 0x4b
-};
+/* Mask-PRF permutation — shares canonical ascon_round_constants from ascon.c
+ * (NIST SP 800-232 Table 5). Module remains colocated; permutation is
+ * identical to wolfcrypt/src/ascon.c 64-bit path. */
+extern const byte ascon_round_constants[12];
 static WC_INLINE byte s_start_index(byte rounds) {
     return (rounds == 8) ? 4 : 0;
 }
 static WC_INLINE void s_ascon_round(AsconState* a, byte round) {
     word64 tmp0, tmp1, tmp2, tmp3, tmp4;
-    a->s64[2] ^= s_round_constants[round];
+    a->s64[2] ^= ascon_round_constants[round];
     a->s64[0] ^= a->s64[4];
     a->s64[4] ^= a->s64[3];
     a->s64[2] ^= a->s64[1];
