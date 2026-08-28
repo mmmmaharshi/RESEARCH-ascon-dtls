@@ -620,7 +620,6 @@ Section MaskPRF.
 
   (* Exact enumeration: U^q * Pr[DupEvent q] = count_coll q U.
      Stated as Rat equality Pr = count_coll / U^q (denominator pos via U_pow_pos). *)
-  Axiom ratSub_eqRat_compat_adm : forall r1 r2 r3 r4, r1 == r2 -> r3 == r4 -> ratSubtract r1 r3 == ratSubtract r2 r4.
   Axiom dup_base_helper : evalDist (DupEvent 0) true == (count_coll 0 U / Nat.pow U 0)%rat.
   Axiom dup_step_arith_helper : forall q, (count_coll q U / Nat.pow U q + (q / U)%rat * ratSubtract 1 (count_coll q U / Nat.pow U q))%rat == (count_coll (S q) U / Nat.pow U (S q))%rat.
   Axiom dup_event_step_recurrence_adm : forall q,
@@ -637,7 +636,7 @@ Section MaskPRF.
       eapply eqRat_trans;
         [eapply ratAdd_eqRat_compat;
          [apply IH
-         | eapply ratMult_eqRat_compat; [reflexivity | eapply ratSub_eqRat_compat_adm; [apply eqRat_refl | apply IH]]] | ].
+         | eapply ratMult_eqRat_compat; [reflexivity | eapply ratSubtract_eqRat_compat; [apply eqRat_refl | apply IH]]] | ].
       apply dup_step_arith_helper.
   Qed.
 
