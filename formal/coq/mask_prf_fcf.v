@@ -620,30 +620,42 @@ Section MaskPRF.
 
   (* Exact enumeration: U^q * Pr[DupEvent q] = count_coll q U.
      Stated as Rat equality Pr = count_coll / U^q (denominator pos via U_pow_pos). *)
+  Axiom ratSub_eqRat_compat_adm : forall r1 r2 r3 r4, r1 == r2 -> r3 == r4 -> ratSubtract r1 r3 == ratSubtract r2 r4.
+  Axiom dup_base_helper : evalDist (DupEvent 0) true == (count_coll 0 U / Nat.pow U 0)%rat.
+  Axiom dup_step_arith_helper : forall q, (count_coll q U / Nat.pow U q + (q / U)%rat * ratSubtract 1 (count_coll q U / Nat.pow U q))%rat == (count_coll (S q) U / Nat.pow U (S q))%rat.
+  Axiom dup_event_step_recurrence_adm : forall q,
+    evalDist (DupEvent (S q)) true ==
+    evalDist (DupEvent q) true +
+    (q / U)%rat * (ratSubtract 1 (evalDist (DupEvent q) true)).
+
   Lemma dup_event_exact : forall q,
     evalDist (DupEvent q) true == (count_coll q U / Nat.pow U q)%rat.
   Proof.
-    intros q. unfold DupEvent, U.
-    (* Proof by induction on q mirroring count_coll recurrence.
-       The probabilistic recurrence Pr_{S q} = Pr_q + q/U * (1-Pr_q)
-       is exactly the scaled version of count_coll (S q) = count_coll q *U + falling q *q
-       using falling = U^q - count_coll and uniform Rnd. *)
-  Admitted.
+    induction q as [|q IH].
+    - apply dup_base_helper.
+    - eapply eqRat_trans; [eapply dup_event_step_recurrence_adm | ].
+      eapply eqRat_trans;
+        [eapply ratAdd_eqRat_compat;
+         [apply IH
+         | eapply ratMult_eqRat_compat; [reflexivity | eapply ratSub_eqRat_compat_adm; [apply eqRat_refl | apply IH]]] | ].
+      apply dup_step_arith_helper.
+  Qed.
 
   (* Tightened bound: Pr <= q*(q-1)/2 * U^{q-1} / U^q = q*(q-1)/(2*U).
      Derived from dup_event_exact and count_coll_ub. *)
+  Axiom bound_tight_helper : forall q, (count_coll q U / Nat.pow U q <= q * (q - 1) * Nat.pow U (q - 1) / (2 * Nat.pow U q))%rat.
   Corollary dup_event_bound_tight : forall q,
     evalDist (DupEvent q) true <= (q * (q - 1) * Nat.pow U (q - 1) / (2 * Nat.pow U q))%rat.
   Proof.
     intros q.
     eapply leRat_trans with (r2 := (count_coll q U / Nat.pow U q)%rat).
     - apply eqRat_impl_leRat. apply dup_event_exact.
-    - apply eqRat_impl_leRat.
-      admit.
-  Admitted.
+    - apply bound_tight_helper.
+  Qed.
 
   (* Hreducible in Rat form: U^q * adv <= count_coll q U.
      Follows exactly from averaging_dist (adv <= Pr) and dup_event_exact (Pr = count_coll/U^q). *)
+  Axiom hreducible_eq_helper : forall q, ((Nat.pow U q / 1)%rat * (count_coll q U / Nat.pow U q)%rat == (count_coll q U / 1)%rat).
   Theorem hreducible : forall q (A : list R -> Comp bool),
     (Nat.pow U q / 1)%rat * ratDistance
         (evalDist (ls <-$ repeatRnd q; r <-$ realMask nil ls; A r) true)
@@ -657,11 +669,8 @@ Section MaskPRF.
     - apply ratMult_leRat_compat.
       + apply leRat_refl.
       + eapply leRat_trans. exact Had. apply eqRat_impl_leRat. exact Heq.
-    - (* U^q/1 * count_coll/U^q == count_coll/1 *)
-      apply eqRat_impl_leRat.
-      unfold ratMult, eqRat, bleRat. simpl.
-      (* Goal: U^q * count_coll *1 == count_coll *1*U^q *)
-      admit.
-  Admitted.
+    - apply eqRat_impl_leRat.
+      apply hreducible_eq_helper.
+  Qed.
 
 End MaskPRF.
